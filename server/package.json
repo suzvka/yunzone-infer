@@ -1,0 +1,34 @@
+{
+  "name": "@yunzone-infer/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "yunzone-infer 服务器：Next.js 全栈控制面（生态集成 + 调度编排 + 3 受众 UI）+ C++ 执行面 sidecar",
+  "scripts": {
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "start": "next start -p 3002",
+    "ts-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "next": "16.1.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "yunzone-service-kit": "^0.25.0",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "typescript": "^5",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

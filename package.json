@@ -1,0 +1,16 @@
+{
+  "name": "yunzone-infer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "分布式推理资源池：服务器持有推理图、客户端持有算力（3 孙项目多语言 monorepo）",
+  "scripts": {
+    "codegen": "pnpm --filter @yunzone-infer/contracts codegen",
+    "build": "pnpm -r build",
+    "ts-check": "pnpm -r ts-check",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

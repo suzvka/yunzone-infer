@@ -1,0 +1,5 @@
+# yunzone-infer monorepo workspace
+# 仅纳管 TS 侧孙项目；client/ 与 server/sidecar/ 为纯 C++（CMake + vcpkg），不在 pnpm workspace。
+packages:
+  - contracts
+  - server

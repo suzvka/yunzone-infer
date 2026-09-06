@@ -1,0 +1,3 @@
+[submodule "external/DCinfer"]
+	path = external/DCinfer
+	url = https://github.com/suzvka/DCinfer

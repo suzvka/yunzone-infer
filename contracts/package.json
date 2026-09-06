@@ -1,0 +1,11 @@
+{
+  "name": "@yunzone-infer/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "协议契约单一事实源（JSON Schema）+ codegen → TS 类型 + C++ 结构（DESIGN D15）",
+  "scripts": {
+    "codegen": "node scripts/codegen.mjs",
+    "build": "node scripts/codegen.mjs"
+  }
+}

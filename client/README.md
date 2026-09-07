@@ -1,8 +1,8 @@
 # client/ — 算力提供者工作后端（孙项目 3，纯 C++）
 
-> 决策权威见 [client/DESIGN.md](./DESIGN.md)：D10（纯 C++，DCinfer 仅引擎适配层）/ D18（daemon + CLI 双二进制 + installer）/ V6（心跳全量能力）/ V10（仅 ORT）/ V11（CLI↔daemon loopback HTTP）；全局架构见根 [DESIGN.md](../DESIGN.md) §3
+> 决策权威见 [client/DESIGN.md](./DESIGN.md)：D10（纯 C++，DCinfer 本地执行编排层：InferGraph 单节点驱动）/ D18（daemon + CLI 双二进制 + installer）/ V6（心跳全量能力）/ V10（仅 ORT）/ V11（CLI↔daemon loopback HTTP）；全局架构见根 [DESIGN.md](../DESIGN.md) §3
 
-算力提供者安装的**实际工作后端**：WS 收「执行节点」任务 → EngineRegistry（DCinfer 引擎适配层，不做图执行）驱动本地引擎 → 经**对象存储总线**下载输入 / 上传输出 → 完成上报。**纯 C++**，**不消费 service-kit**。
+算力提供者安装的**实际工作后端**：WS 收「执行节点」任务 → **InferGraph 单节点驱动**（DCinfer 本地执行编排层：模型→图内节点，端点=图拓扑）驱动本地引擎 → 经**对象存储总线**下载输入 / 上传输出 → 完成上报。**纯 C++**，**不消费 service-kit**。
 
 ## 双二进制（D18）
 
@@ -23,7 +23,7 @@
 ## 关键约束
 
 - **无 DCNet / 无监听端**（V9）：原变体 A 监听端已退役；任务经 WS 通知 + 总线自取，client 不被出站直驱。
-- **DCinfer 仅引擎适配层**（V10）：EngineRegistry + OnnxRuntime 引擎适配器（`BUILD_ENGINES=ON`），不做图执行；EngineRegistry 独立调用表面为 P0 spike 验证项。
+- **DCinfer 本地执行编排层**（V10 + D10 修订，2026-09-07）：InferGraph 单节点驱动（模型→图内节点；端点 = 图拓扑，端点封装意图见 [DESIGN.md](./DESIGN.md) §1）+ OnnxRuntime 引擎适配器（`BUILD_ENGINES=ON`）；执行表面已经 P0 spike 实证（`probe/`）。
 - **任务队列**（qingge-api TaskPool 模式，§3.5）：per-model 多级优先级 + 过量注入满负荷 + 标记式懒惰撤销 + 配置静态深度上限 + 余量软反压；**无任务级超时**（取消 / 判死重派覆盖）；显存水位终端级上报（供后续自动拉取模型部署）。
 - **信任边界**（security §1）：client 属**不信任域**；**禁自助触发 deposit**（收益 / 存入只在 server，D19）；注册鉴权（V3 强制，不收硬件指纹）+ 结果验证在控制面。
 - **难度系数**（D12/V13）：按模型元数据难度钩子计算并随完成上报；市场机制约束，无审计。

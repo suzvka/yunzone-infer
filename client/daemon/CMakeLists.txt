@@ -1,8 +1,8 @@
-# infer-clientd — 算力提供者常驻守护（注册/心跳 + WS 收任务 + EngineRegistry 执行 + 总线交互 + 完成上报）
+# infer-clientd — 算力提供者常驻守护（注册/心跳 + WS 收任务 + InferGraph 单节点驱动执行 + 总线交互 + 完成上报）
 add_executable(infer-clientd src/main.cpp)
 target_include_directories(infer-clientd PRIVATE src ${CONTRACTS_CPP})
 
-# DCinfer（仅引擎适配层：EngineRegistry + OnnxRuntime 适配器，V10；不做图执行）就位后接线
+# DCinfer（本地执行编排层：InferGraph 单节点驱动 + OnnxRuntime 适配器，V10/D10 修订）就位后接线
 if(TARGET DCinfer::DCinfer)
     target_link_libraries(infer-clientd PRIVATE DCinfer::DCinfer)
 endif()

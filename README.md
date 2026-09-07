@@ -10,7 +10,7 @@
 |---|---|---|
 | [`contracts/`](./contracts) | JSON Schema + codegen | 协议契约**单一事实源**（能力声明 / 控制通道 API / IPC 线格式 / 错误码）→ 生成 TS 类型 + C++ 结构（D15） |
 | [`server/`](./server) | Next.js（TS）+ C++ sidecar | **控制面**（生态集成 + 调度编排 + 3 受众 UI）+ **执行面**（DCinfer 图执行 / 聚合 / 对象存储总线驱动，sidecar 子进程） |
-| [`client/`](./client) | 纯 C++（CMake + vcpkg） | 算力提供者工作后端：**daemon**（注册/心跳/WS 收任务/EngineRegistry 引擎执行/总线交互）+ **CLI** 控制 + installer 分发（D18） |
+| [`client/`](./client) | 纯 C++（CMake + vcpkg） | 算力提供者工作后端：**daemon**（注册/心跳/WS 收任务/InferGraph 单节点驱动执行/总线交互）+ **CLI** 控制 + installer 分发（D18） |
 | [`external/`](./external) | git submodule | [DCinfer](https://github.com/suzvka/DCinfer)（内含 DCIr / DCNet）锁版本引入（D17 依赖锁定，只复用不修改；`BUILD_DCNET=OFF`） |
 
 ## 两条通道（DESIGN §3，不可混用）

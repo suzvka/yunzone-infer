@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 基础工程（../external/ submodule，suzvka/DCinfer；只复用不修改，DESIGN D13/D17）
-# client 用途＝引擎适配层（V10）：BUILD_ENGINES=ON 启用 OnnxRuntime 引擎适配器；BUILD_DCNET=OFF（V9）
+# client 用途＝本地执行编排层（V10 + D10 修订：InferGraph 单节点驱动）：BUILD_ENGINES=ON 启用 OnnxRuntime 引擎适配器；BUILD_DCNET=OFF（V9）
 set(DCINFER_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../external/DCinfer)
 if(EXISTS ${DCINFER_ROOT}/CMakeLists.txt)
     set(BUILD_ENGINES ON CACHE BOOL "" FORCE)

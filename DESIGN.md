@@ -51,7 +51,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
     ├── 注册 / 心跳        REST 客户端 → 控制面控制通道；心跳全量携带（模型清单 + 队列余量 + 显存水位，V6）
     ├── 任务接收           WS 单向推送：「执行节点」通知入队（任务键 + 模型引用 + 输入 URI + 输出目标 + 优先级标志，V5）
     ├── 任务队列           per-model 多级优先级队列（qingge-api TaskPool 模式）：过量注入缓冲保持满负荷
-    ├── 本地执行           DCinfer 仅作引擎适配层（EngineRegistry + OnnxRuntime 适配器，V10；不做图执行）；出队前检查撤销标记
+    ├── 本地执行           InferGraph 单节点驱动（模型→图内节点；端点=图拓扑，D10 修订）+ OnnxRuntime 适配器（V10）；出队前检查撤销标记
     └── 结果交互           下载输入 / 上传输出均经 /storage 预签名 URL（对象存储总线，§9）+ 完成上报（含分段耗时）
 ```
 
@@ -103,7 +103,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 | D7 | 结果回收寻址 | `(客户端,任务)` 二元组 + 控制面 /db Ledger | [server/DESIGN.md](./server/DESIGN.md) |
 | **D8** | 回收语义 | 事件驱动统一（完成上报 + 对象存储拉取） | **本文 §4.1** |
 | D9 | 图分区 | MVP 整图绑定单客户端 / 静态手动分区 | [server/DESIGN.md](./server/DESIGN.md) |
-| D10 | 客户端栈 | 纯 C++（DCinfer 仅引擎适配层 + REST/WS），不消费 service-kit | [client/DESIGN.md](./client/DESIGN.md) |
+| D10 | 客户端栈 | 纯 C++（DCinfer 本地执行编排层：InferGraph 单节点驱动 + REST/WS），不消费 service-kit | [client/DESIGN.md](./client/DESIGN.md) |
 | D11 | Next 运行时 | 自托管 standalone（node runtime） | [server/DESIGN.md](./server/DESIGN.md) |
 | D12 | 生态计费 | /points 双向流 + **模型报价**（单价 × 难度钩子） | [server/DESIGN.md](./server/DESIGN.md) |
 | **D13** | 对基础工程 | 只复用不修改 + 提案反馈路线图 | **本文 §4.1** |
@@ -134,8 +134,8 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 ## 9. P0 专项（早期锁定，风险前置）
 
 1. **数据面（对象存储总线）**（2026-09-07 重写，替代原「变体 A/B 入站监听端」专项）：
-   - **形态**：一切张量以 **URI + 元数据**寻址（V8）——执行面为远程节点生成「模型引用 + 输入 URI + 输出上传目标」→ 控制通道 WS 下发（V5）→ client 下载输入、EngineRegistry 执行（DCinfer OnnxRuntime 适配器，V10）、上传输出 → **完成上报** → 执行面拉取并唤醒等待中的图节点（D8 事件驱动）。
-   - **P0 须完成**：① URI + 元数据契约（contracts `control-channel/` + `ipc/`）与最小总线闭环（本地对象存储替身，V12）；② **对拍**（同图单机执行 vs 经总线分布式执行逐节点比对）；③ **EngineRegistry 独立调用表面验证**（client 仅作引擎适配层使用，若与图执行上下文耦合需在 client 内薄包装，不动本体，D13）；④ **双平台可移植性实证**（DCinfer/DCIr 在 Windows MSVC + Linux GCC/Clang build+run，D17 头号未知）。
+   - **形态**：一切张量以 **URI + 元数据**寻址（V8）——执行面为远程节点生成「模型引用 + 输入 URI + 输出上传目标」→ 控制通道 WS 下发（V5）→ client 下载输入、InferGraph 单节点驱动执行（DCinfer OnnxRuntime 适配器，V10；D10 修订）、上传输出 → **完成上报** → 执行面拉取并唤醒等待中的图节点（D8 事件驱动）。
+   - **P0 须完成**：① URI + 元数据契约（contracts `control-channel/` + `ipc/`）与最小总线闭环（本地对象存储替身，V12）；② **对拍**（同图单机执行 vs 经总线分布式执行逐节点比对）；③ **client 执行形态已定（2026-09-07 spike + 决策访谈）**：Node/EngineRegistry 独立表面与图驱动表面均经实证（`client/probe/` 12/12；DCinfer 核心 MSVC 10/10），采纳 **InferGraph 单节点驱动**（端点 = 图拓扑，client/DESIGN.md D10 修订），薄包装保留为备选面；不动本体（D13）；④ **双平台可移植性实证**（DCinfer/DCIr 在 Windows MSVC + Linux GCC/Clang build+run，D17 头号未知）。
    - **已知约束**：张量经对象存储中转，延迟高于直连——由端点**任务队列**吸收（server 过量注入 + 队列缓冲保持满负荷，[client/DESIGN.md](./client/DESIGN.md) §3.5），直连列为 P3 优化（D13 提案机制）；预签名 URL 天然 HTTPS，原「数据通道无 TLS」风险大体消解（§11）；队列深度上限 = 端点配置静态值，反压 = 余量软控制。
 2. **能力声明 Schema 版本化**（[contracts/DESIGN.md](./contracts/DESIGN.md) §3）：控制面 / 客户端 / 执行面三方共同契约。
 3. **控制面 ↔ 执行面 IPC 协议**（[server/DESIGN.md](./server/DESIGN.md) §4）：DCIr JSON + 绑定计划的具体线格式。
@@ -180,8 +180,8 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 
 ## 13. 落地顺序
 
-1. **P0 奠基**：**仓库骨架（3 孙项目）+ 双轨 CI（OS 矩阵）冒烟**；`contracts/` JSON 单一事实源 + codegen（TS/C++）落地；锁双平面边界 + sidecar IPC（D16 HTTP-loopback）；**数据面最小总线闭环 + 对拍 spike**（对象存储 URI 契约 + EngineRegistry 独立调用验证；**双平台可移植性仍须实证**）；能力声明 Schema 版本化；多机集成测试骨架（确定性对拍）。
-2. **P1 单跳闭环（MVP）**：`/registry` 节点注册中心（继承 ProviderRegistry + **自建 TTL 存活/注销/多能力匹配**，D4）→ 能力检视 → 整图绑定单客户端 → 任务下发（WS）→ **远程节点经对象存储总线 + 完成上报驱动 client 执行（EngineRegistry + ORT 适配器）** → C++ 聚合 → 回控制面；`/auth` 请求鉴权（P1 即强制，V3）+ `/ops` 管理控制台展示已登记节点。跑通"端到端正确性 + 语义一致性"两条验收。**关键路径**：client 引擎适配层（EngineRegistry + ORT）与对象存储总线闭环。
+1. **P0 奠基**：**仓库骨架（3 孙项目）+ 双轨 CI（OS 矩阵）冒烟**；`contracts/` JSON 单一事实源 + codegen（TS/C++）落地；锁双平面边界 + sidecar IPC（D16 HTTP-loopback）；**数据面最小总线闭环 + 对拍 spike**（对象存储 URI 契约 + client 执行表面验证已定，§9③；**双平台可移植性仍须实证**）；能力声明 Schema 版本化；多机集成测试骨架（确定性对拍）。
+2. **P1 单跳闭环（MVP）**：`/registry` 节点注册中心（继承 ProviderRegistry + **自建 TTL 存活/注销/多能力匹配**，D4）→ 能力检视 → 整图绑定单客户端 → 任务下发（WS）→ **远程节点经对象存储总线 + 完成上报驱动 client 执行（InferGraph 单节点驱动 + ORT 适配器）** → C++ 聚合 → 回控制面；`/auth` 请求鉴权（P1 即强制，V3）+ `/ops` 管理控制台展示已登记节点。跑通"端到端正确性 + 语义一致性"两条验收。**关键路径**：client 图驱动执行（InferGraph 单节点 + ORT 适配器）与对象存储总线闭环。
 3. **P2 分区 + 异步**：静态图分区；多任务在途调度 + shelf_life + 任务级重调度（回收按 `(客户端,任务)` 键寻址 + 注入等待中的图节点，D8 事件驱动）；`/db` Ledger 持久化；`/points` 计量（模型报价：单价 × 难度钩子，D12；受 §12.6 门禁约束）；容错验收（掉线 / 超时 / 过载）。
 4. **P3 优化**：打分调度（借鉴成熟调度器打分策略）；高效张量格式演进；自动图分区探索。
 

@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CompletionReport",
+  "description": "完成上报（POST /v1/tasks/completions；D8 事件驱动回收：client 上传输出至对象存储 → 本上报 → 执行面拉取并唤醒等待中的图节点）。成功与失败统一走本结构：失败以 errorCode 表达（E_INFER_FAILED / E_STORAGE_TRANSFER_FAILED 等），outputUri/outputMeta 缺省。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "taskId", "endpointId", "requestId", "metrics"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "任务标识（server 派发时给定）"
+    },
+    "endpointId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "(端点, 任务) 二元组回收键之端点侧（D7）"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "幂等键 = hash(endpointId, taskId)（security §4.1），随 TaskDispatch 下发回传；重派任务先到先得，重复上报回 E_TASK_ALREADY_REPORTED（duplicate=true）"
+    },
+    "outputUri": {
+      "type": ["string", "null"],
+      "description": "输出对象 URI（对象存储总线，张量本体不走 JSON，V8）；失败上报为 null"
+    },
+    "outputMeta": {
+      "$ref": "#/definitions/TensorMeta",
+      "description": "输出形状/类型元数据；失败上报缺省。server 检视用（结果格式校验 security §2.2）"
+    },
+    "difficulty": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "难度系数：模型元数据中难度钩子（输入张量 → 系数）的执行期计算值。属不信任域自报值，信任市场竞争 + 直营模型精算（V13，不建抽样审计）；计费 = 难度 × 模型单价（D12）"
+    },
+    "errorCode": {
+      "$ref": "../errors/error-codes.schema.json",
+      "description": "执行失败时携带；sidecar 据此映射图级节点失败（errors 域）；成功上报缺省"
+    },
+    "metrics": {
+      "$ref": "#/definitions/StageMetrics",
+      "description": "分段耗时（qingge-api 分段审计模式）；兼作耗时下限校验的结果验证辅助信号（security §2）"
+    }
+  },
+  "definitions": {
+    "TensorMeta": {
+      "title": "TensorMeta",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shape", "dtype"],
+      "properties": {
+        "shape": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "张量形状（各维长度）"
+        },
+        "dtype": {
+          "type": "string",
+          "enum": ["float32", "float16", "bfloat16", "int64", "int32", "int8", "uint8", "bool"],
+          "description": "张量元素类型"
+        }
+      }
+    },
+    "StageMetrics": {
+      "title": "StageMetrics",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queueWaitMs", "downloadMs", "inferMs", "uploadMs"],
+      "properties": {
+        "queueWaitMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "端点队列排队耗时（毫秒）"
+        },
+        "downloadMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "输入下载耗时（预签名 URL GET + hash 校验，毫秒）"
+        },
+        "inferMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "EngineRegistry 执行耗时（毫秒）"
+        },
+        "uploadMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "输出上传耗时（预签名 URL PUT，毫秒）"
+        }
+      }
+    }
+  }
+}

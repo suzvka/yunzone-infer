@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NodeCompletionNotice",
+  "description": "IPC：控制面 → sidecar 节点完成通知（POST /workflows/{workflowId}/node-completions；D8 事件驱动唤醒：控制面收到端点完成上报后转发，sidecar 从对象存储拉取输出并唤醒等待中的图节点）。鉴权同 StartWorkflowRequest（x-ipc-token）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "taskId", "nodeId"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "ipc 域契约版本"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "未知 workflowId 回 E_IPC_WORKFLOW_UNKNOWN 错误信封"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "完成任务标识（与 TaskDispatch.taskId 对应）"
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "完成的图节点 ID"
+    },
+    "outputUri": {
+      "type": ["string", "null"],
+      "description": "输出对象 URI（端点已上传至对象存储；sidecar 拉取）；失败通知为 null"
+    },
+    "outputMeta": {
+      "$ref": "../control-channel/completion-report.schema.json#/definitions/TensorMeta",
+      "description": "输出形状/类型元数据（与 CompletionReport.outputMeta 同构，控制面透传）"
+    },
+    "errorCode": {
+      "$ref": "../errors/error-codes.schema.json",
+      "description": "端点执行失败时携带（E_INFER_FAILED / E_STORAGE_TRANSFER_FAILED 等）；sidecar 映射为图级节点失败（根 DESIGN §9）"
+    },
+    "metrics": {
+      "$ref": "../control-channel/completion-report.schema.json#/definitions/StageMetrics",
+      "description": "分段耗时透传（sidecar 可忽略；调度打分消费在控制面，P3）"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkflowStatusSnapshot",
+  "description": "IPC：sidecar 工作流状态快照（GET /workflows/{workflowId}/status；V7 定案：控制面轮询，探活一体，无反向鉴权面）。pendingDispatches 为轮询取走通道：sidecar 组装的远程节点任务描述，控制面取走后签发预签名 URL 并经 WS 下发端点（V5）——sidecar 不感知 WS 与生态。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "status"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "ipc 域契约版本"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "$ref": "#/definitions/GraphExecutionStatus"
+    },
+    "nodeStates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/NodeState"
+      },
+      "description": "节点级状态快照（诊断 / ops 投影用）"
+    },
+    "pendingDispatches": {
+      "type": "array",
+      "items": {
+        "$ref": "../control-channel/task-dispatch.schema.json"
+      },
+      "description": "待派发任务描述（TaskDispatch 形态，inputUri/outputUri 此刻为对象 URI；控制面取走后替换为预签名 URL 再下发）"
+    },
+    "finalOutputUri": {
+      "type": "string",
+      "description": "最终输出 URI（图执行完毕经 /storage 上传后回填；控制面仅持元数据 + URI，V8）"
+    },
+    "errorCode": {
+      "$ref": "../errors/error-codes.schema.json",
+      "description": "status=failed 时的失败原因"
+    }
+  },
+  "definitions": {
+    "GraphExecutionStatus": {
+      "title": "GraphExecutionStatus",
+      "type": "string",
+      "description": "sidecar 侧图执行状态（区别于控制面工作流生命周期 WorkflowLifecycleStatus）",
+      "enum": ["starting", "executing", "waitingRemote", "completed", "failed"]
+    },
+    "NodeExecutionState": {
+      "title": "NodeExecutionState",
+      "type": "string",
+      "description": "单节点执行状态",
+      "enum": ["pending", "running", "completed", "failed"]
+    },
+    "NodeState": {
+      "title": "NodeState",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "state"],
+      "properties": {
+        "nodeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/definitions/NodeExecutionState"
+        },
+        "errorCode": {
+          "$ref": "../errors/error-codes.schema.json",
+          "description": "state=failed 时携带（远程节点失败经完成上报错误码映射，语义与本地执行对齐——根 DESIGN §9）"
+        }
+      }
+    }
+  }
+}

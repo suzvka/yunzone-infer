@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ErrorEnvelope",
+  "description": "统一错误响应信封（REST / IPC JSON 载荷通用）。ok 恒为 false；errorCode 必带，message/detail 可选补充。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "ok", "errorCode"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "errors 域契约版本（V2：每域整数递增，破坏性变更 +1）"
+    },
+    "ok": {
+      "const": false,
+      "description": "错误信封恒为 false"
+    },
+    "errorCode": {
+      "$ref": "error-codes.schema.json",
+      "description": "infer 自有错误码（本域枚举）"
+    },
+    "message": {
+      "type": "string",
+      "description": "人类可读错误描述（可选）"
+    },
+    "detail": {
+      "type": "object",
+      "description": "结构化补充信息（可选；键值不做契约约束）"
+    }
+  }
+}

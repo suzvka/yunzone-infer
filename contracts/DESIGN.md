@@ -18,7 +18,7 @@
 
 - **张量数据面走对象存储总线（URI + 元数据契约，V8），不进 JSON 载荷**（本孙项目只管控制 / 元数据契约；2026-09-07 修正，原「DCNet 二进制」表述退役）。
 - `generated/` **不入库**（构建期生成，见根 `.gitignore`）；`server`/`client`/`sidecar` 构建前置运行 `pnpm codegen`。
-- **工具链已定（V1，2026-09-07）**：TS 侧 `json-schema-to-typescript` + C++ 侧自研生成器（nlohmann-json struct + `to_json`/`from_json`）；当前 `scripts/codegen.mjs` 仍为占位（`exit 0`），P0 落地实现。
+- **工具链已定（V1，2026-09-07）**：TS 侧 `json-schema-to-typescript` + C++ 侧自研生成器（nlohmann-json struct + `to_json`/`from_json`）；`scripts/codegen.mjs` 已实现（P0 首版：14 schema → TS/C++ 双产物，`pnpm codegen` 一键生成，`pnpm ts-check` 校验 TS 侧）。
 
 ### D6 — 能力声明 Schema：复用 DCinfer EngineDescriptor + 端口 Schema
 

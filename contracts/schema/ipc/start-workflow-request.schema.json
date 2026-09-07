@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StartWorkflowRequest",
+  "description": "IPC：控制面 → sidecar 启动工作流（POST /workflows）。鉴权：x-ipc-token header（D16：每次启动随机 token）。执行面职责：DCIr 反序列化重建图 → 按 bindingPlan 把节点标记为远程 → 数据驱动执行本地节点 → 远程节点组装任务描述（经 /status 轮询被控制面取走下发）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "graph", "bindingPlan"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "ipc 域契约版本（V2：每域整数递增，破坏性变更 +1）"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "工作流标识（控制面生成，全局唯一）"
+    },
+    "graph": {
+      "type": "object",
+      "description": "DCIr 序列化图 JSON 原样承载（D3：控制面静态读图不 link DCinfer；本契约不建模其内部结构——基础工程所有物，D13 只复用不修改）"
+    },
+    "bindingPlan": {
+      "$ref": "#/definitions/BindingPlan"
+    }
+  },
+  "definitions": {
+    "BindingPlan": {
+      "title": "BindingPlan",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remoteNodes"],
+      "properties": {
+        "remoteNodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RemoteNodeBinding"
+          },
+          "description": "远程节点绑定计划。MVP 整图绑定单客户端 / 静态手动分区（D9）；有互斥关系的节点、环/反馈回路必须绑定同一端点（调度层约束）"
+        }
+      }
+    },
+    "RemoteNodeBinding": {
+      "title": "RemoteNodeBinding",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "modelKey", "outputUri"],
+      "properties": {
+        "nodeId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "图节点 ID（与 graph 内节点标识一致；执行面据此标记远程节点）"
+        },
+        "modelKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "模型引用（/storage 产物键）"
+        },
+        "outputUri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "该节点输出上传目标（对象存储 URI；预签名 URL 由控制面在派发时签发——URI 语义为对象键，控制面据其签 URL，避免长任务预签名过期）"
+        }
+      }
+    }
+  }
+}

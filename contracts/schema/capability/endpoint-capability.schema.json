@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EndpointCapability",
+  "description": "能力声明（端点语义，contracts/DESIGN §3，2026-09-07 重定）：模型清单 + per-model 队列余量 + 终端级显存水位。注册与心跳全量携带（V6，默认 30s / TTL 90s），server 每跳覆盖能力视图。已废止：并发容量字段（队列模型替代）、引擎类型/端口形状端点级声明（并入模型元数据）、每模型显存（改终端级水位）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "models", "vramFreeBytes"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "capability 域契约版本（V2：每域整数递增，破坏性变更 +1；三方比对只看整数相等，不匹配即 E_CAPABILITY_VERSION_MISMATCH）"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ModelQueueEntry"
+      },
+      "description": "静态面：可服务模型清单（/storage 产物键）；动态·调度面：随条目携带当前队列余量"
+    },
+    "vramFreeBytes": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "动态·部署面：终端级可用显存水位（字节）。纯 CPU 端点为 null；不参与队列深度计算，后续用于「自动拉取服务器需要的模型并部署」"
+    }
+  },
+  "definitions": {
+    "ModelQueueEntry": {
+      "title": "ModelQueueEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelKey", "queueRemaining"],
+      "properties": {
+        "modelKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "可服务模型清单键（/storage 产物键）；引擎兼容性 / 端口形状由模型元数据（DCIr 产物）承载，端点不重复声明。检视 = 图节点模型引用 ∈ 本清单（布尔判断，不满足拒绝启动）"
+        },
+        "queueRemaining": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "per-model 任务队列余量（任务数）。每模型队列深度上限为端点配置静态值（不上报）；反压 = 余量软控制：server 注入前查余量，满则暂缓推送（client/DESIGN §3.5）"
+        }
+      }
+    }
+  }
+}

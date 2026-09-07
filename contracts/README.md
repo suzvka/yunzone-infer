@@ -10,17 +10,18 @@
 
 | 域 | 内容 | 消费方 | 状态 |
 |---|---|---|---|
-| `capability/` | 能力声明 Schema（引擎类型 / 模型 / 端口形状规则 / 并发容量，[contracts/DESIGN.md](./DESIGN.md) §3；EngineRegistry 直出，运行时同构） | client 声明 · server 检视 · sidecar 绑定 | P0 版本化锁定（版本号规则已定 V2；首版字段待 [contracts/DESIGN.md](./DESIGN.md) §6 定） |
+| `capability/` | 能力声明 Schema（端点语义四面：模型清单 / 队列余量 / 显存水位 / 分段耗时，[contracts/DESIGN.md](./DESIGN.md) §3） | client 声明 · server 检视 · sidecar 绑定 | 首版已落地（v1；字段粒度随对接深化演进，破坏性变更走 V2 递增） |
 | `control-channel/` | 控制通道 API：REST（注册 / 心跳全量能力 / 完成上报 / 状态）+ WS 单向推送（任务下发，V5/V6） | client ↔ server 控制面 | P0 |
 | `ipc/` | 控制面 ↔ 执行面 IPC 线格式（DCIr JSON 图 + 绑定计划，[server/DESIGN.md](../server/DESIGN.md) §4 / D16 / V7 / V8） | server 控制面 ↔ sidecar | P0 |
 | `errors/` | infer 自有错误码（控制通道 + IPC + 完成上报） | 全栈 | P0 |
 
 ## codegen
 
-- 输入：`schema/**/*.json`（JSON Schema）
-- 输出：`generated/ts/`（TS 类型）+ `generated/cpp/`（nlohmann-json 结构 / `to_json`·`from_json`）
+- 输入：`schema/**/*.schema.json`（JSON Schema draft-07；跨域引用用相对路径 `$ref`，如 `../errors/error-codes.schema.json`）
+- 输出：`generated/ts/`（TS 类型 + `index.ts` barrel）+ `generated/cpp/`（nlohmann-json 结构 / `to_json`·`from_json` + `contracts.hpp` 总入口）
 - `generated/` **不入库**（构建期生成，见根 `.gitignore`）；`server`/`client`/`sidecar` 构建前置运行 `pnpm codegen`
-- **工具链已定（V1）**：TS 侧 `json-schema-to-typescript` + C++ 侧自研生成器；当前 `scripts/codegen.mjs` 为占位，P0 落地
+- **工具链（V1）**：TS 侧 `json-schema-to-typescript`（bundle 解析跨文件 `$ref`）；C++ 侧自研生成器——required→值成员，可选/可空→`std::optional`，字符串枚举→`enum class` + `toString`，`const`→`from_json` 校验，自由 object（DCIr 图 / detail）→`nlohmann::json` 原样承载；不支持构造（oneOf/allOf/内联 object 等）fail-fast
+- TS 校验：`pnpm ts-check`（tsc --noEmit strict 对 generated 产物）
 
 ## 版本化与边界
 

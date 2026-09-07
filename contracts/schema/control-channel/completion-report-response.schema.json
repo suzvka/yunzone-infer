@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CompletionReportResponse",
+  "description": "完成上报响应。requestId 幂等：首次受理 ok=true；重复上报 ok=true + duplicate=true（先到先得）；未知任务回 E_TASK_UNKNOWN 错误信封。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "ok"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "上报是否被受理"
+    },
+    "duplicate": {
+      "type": "boolean",
+      "description": "requestId 幂等命中（重复上报）时为 true；端点可安全丢弃"
+    }
+  }
+}

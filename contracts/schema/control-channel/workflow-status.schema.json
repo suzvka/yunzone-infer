@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorkflowStatus",
+  "description": "工作流状态查询响应（GET /v1/workflows/{workflowId}）。状态机对齐 server/DESIGN §5：登记→检视→绑定→派发→执行→回推→聚合。未找到回 E_WORKFLOW_NOT_FOUND 错误信封。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "status"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "$ref": "#/definitions/WorkflowLifecycleStatus"
+    },
+    "errorCode": {
+      "$ref": "../errors/error-codes.schema.json",
+      "description": "status=rejected/failed 时携带的失败原因"
+    },
+    "finalOutputUri": {
+      "type": "string",
+      "description": "最终输出 URI（聚合完成后回填；控制面仅持元数据 + URI，V8）"
+    },
+    "updatedAtMs": {
+      "type": "integer",
+      "description": "状态最后更新时刻（Unix 毫秒）"
+    }
+  },
+  "definitions": {
+    "WorkflowLifecycleStatus": {
+      "title": "WorkflowLifecycleStatus",
+      "type": "string",
+      "description": "工作流生命周期状态（server 控制面状态机）",
+      "enum": [
+        "registered",
+        "inspecting",
+        "rejected",
+        "binding",
+        "dispatching",
+        "executing",
+        "collecting",
+        "aggregating",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    }
+  }
+}

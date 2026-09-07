@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskDispatch",
+  "description": "WS 单向推送（server → client）：「执行节点」任务下发（V5）。端点收到后入 per-model 队列（qingge-api TaskPool 模式）；队列元素为轻量任务元数据，张量在对象存储，出队才下载。type 字段为推送消息判别标签。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "type", "taskId", "requestId", "workflowId", "nodeId", "modelKey", "inputUri", "outputUri", "priority"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "type": {
+      "const": "task.dispatch",
+      "description": "WS 推送判别标签"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "任务标识"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "幂等键 = hash(endpointId, taskId)；完成上报时回传"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "所属工作流（供端点展示/诊断）"
+    },
+    "nodeId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "待执行的图节点 ID（单节点执行 = 引擎前向，client 不做图执行）"
+    },
+    "modelKey": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模型引用（/storage 产物键）；模型本体获取同样经控制面签发的预签名 URL（D20 消费侧）"
+    },
+    "inputUri": {
+      "type": "string",
+      "minLength": 1,
+      "description": "输入下载目标：控制面签发的预签名 URL（D20：一切传输走预签名 URL，client 不持对象存储凭证）；时效覆盖风险由过量注入+队列吸收与 TTL 判死重派兜底（P0 对拍验证）"
+    },
+    "outputUri": {
+      "type": "string",
+      "minLength": 1,
+      "description": "输出上传目标：预签名 PUT URL（对象存储总线）"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["normal", "compensation"],
+      "description": "优先级标志：失败重派任务带 compensation（升入端点优先子队列——已排过队，失败是端点的问题，不由任务负责，client/DESIGN §3.5）"
+    },
+    "dispatchedAtMs": {
+      "type": "integer",
+      "description": "server 派发时刻（Unix 毫秒），可选"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskRevoke",
+  "description": "WS 单向推送（server → client）：任务撤销标记（标记式懒惰撤销）。端点收到后打标记，出队执行前检查，已标记则跳过取下一个；不中断正在执行的任务（无任务级超时，用户等不及走取消，端点掉线走 TTL 判死重派）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "type", "taskId", "endpointId"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "type": {
+      "const": "task.revoke",
+      "description": "WS 推送判别标签"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "待撤销任务标识"
+    },
+    "endpointId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "原派发端点（撤销标记只对该端点的队列生效）"
+    },
+    "reason": {
+      "type": "string",
+      "description": "撤销原因（可选，供诊断；如 workflow-cancelled / endpoint-reassigned）"
+    }
+  }
+}

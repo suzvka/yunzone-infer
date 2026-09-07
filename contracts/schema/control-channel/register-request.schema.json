@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RegisterRequest",
+  "description": "控制通道注册请求（POST /v1/endpoints）。鉴权：Authorization: Bearer <机器凭证>（V3，P1 即强制，对接 /auth client_credentials，绑定 accountId）；凭证无效/未激活回 E_AUTH_REJECTED 错误信封。注册仅首次握手建账，此后能力视图靠心跳全量覆盖（V6）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "endpointId", "capability"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本（V2：每域整数递增，破坏性变更 +1）"
+    },
+    "endpointId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "端点唯一标识，client 生成（如 hostname + 随机后缀）。重复注册由 server 拒绝（E_ENDPOINT_ALREADY_REGISTERED）；(端点, 任务) 二元组为结果回收基本键（D7）"
+    },
+    "capability": {
+      "$ref": "../capability/endpoint-capability.schema.json",
+      "description": "初始能力声明（全量）"
+    }
+  }
+}

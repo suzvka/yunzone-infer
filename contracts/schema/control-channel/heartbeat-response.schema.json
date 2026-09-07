@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HeartbeatResponse",
+  "description": "心跳响应（POST /v1/endpoints/{endpointId}/heartbeat）。心跳请求体 = EndpointCapability 全量（V6：每跳覆盖能力视图，最防漂移；请求体不另设结构）。请求来自未注册端点回 E_ENDPOINT_UNKNOWN 错误信封。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "ok"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "control-channel 域契约版本"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "心跳是否被接受（能力域版本不匹配回 false + E_CAPABILITY_VERSION_MISMATCH 信封）"
+    },
+    "serverTimeMs": {
+      "type": "integer",
+      "description": "server 当前 Unix 时间（毫秒），供端点时钟参考"
+    }
+  }
+}

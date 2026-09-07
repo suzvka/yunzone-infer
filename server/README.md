@@ -24,13 +24,14 @@
 
 C++ 子进程，link DCinfer（`BUILD_DCNET=OFF`，V9）：DCIr 反序列化重建图 → 按绑定计划标记远程节点 → 数据驱动执行（本地节点进程内；远程节点生成「模型引用 + 输入 URI」经 WS 下发 client，V5/V8）→ 完成上报唤醒 + 对象存储拉取 → 聚合 → 最终输出经 `/storage` 上传（控制面仅持元数据 + URI）。控制面轮询 `GET /status` 获取状态（V7）。详见 [`sidecar/README.md`](./sidecar/README.md)。
 
-## 开发（骨架期，依赖尚未安装）
+## 开发
 
 ```bash
-pnpm install                              # 于 workspace 根执行
+pnpm install                              # 于 workspace 根执行（contracts 类型由 pre hook 自动生成）
 cp .env.example .env                      # 填部署面 / 鉴权 / uc / sidecar / db
 pnpm --filter @yunzone-infer/server dev   # next dev -p 3002
+pnpm --filter @yunzone-infer/server ts-check && pnpm --filter @yunzone-infer/server test && pnpm --filter @yunzone-infer/server build
 ```
 
-> ⚠️ Next 版本可能与既有认知不同（house 16.x）——编写 `app/` 代码前先读 `node_modules/next/dist/docs/`（见根 `AGENTS.md`）。
-> `app/` 路由与 `lib/` 结构在 **P1** 初始化（规划见 [`app/README.md`](./app/README.md)）；消费 `@yunzone-infer/contracts` 生成类型待 contracts codegen 落地（P0）。
+> ⚠️ house Next 16.1.1 包内**无** `dist/docs/`（AGENTS 指引路径失效，见 CouplingRecord）——编写 `app/` 代码遵循保守 API 面（标准 Web Request/Response + 稳定 App Router 形态），以 build/ts-check 反馈为准。
+> 控制通道 REST 四端点 + ops report 已落地（骨架，内存态）；**WS 推送（V5）留 P1**——Next route handler 不支持 WS upgrade，需自定义 server 包装或网关，单独 spike。三受众 UI 见 [`app/README.md`](./app/README.md)。

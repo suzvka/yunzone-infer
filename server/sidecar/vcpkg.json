@@ -1,0 +1,10 @@
+{
+  "name": "infer-sidecar",
+  "version": "0.0.0",
+  "description": "yunzone-infer 执行面 sidecar C++ 依赖；DCinfer（含 DCIr）经 ../../external submodule 引入，不在此列。onnxruntime 待 P0 spike 收紧 BUILD_ENGINES 后决定是否加入（本地节点引擎需求，见 server/sidecar/README.md）",
+  "dependencies": [
+    "nlohmann-json",
+    "zlib",
+    "minizip"
+  ]
+}

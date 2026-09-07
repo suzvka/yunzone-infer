@@ -18,7 +18,7 @@
 |---|---|---|
 | **DCinfer** | C++20 推理图编排运行时（数据驱动并发、EngineRegistry 插件式引擎、端口 Schema 校验、零依赖核心静态库） | 复用图持有 / 执行 / 聚合能力，**只读不改** |
 | **DCIr** | 推理图序列化 / 反序列化 + 模型打包（nlohmann-json + minizip + zlib） | 序列化图产物 = 控制面 ↔ 执行面的**契约载体** |
-| **DCNet** | 张量网络传输框架（DCinfer 仓库内模块，出站已建成） | **2026-09-07 修正：不启用**（`BUILD_DCNET=OFF`，submodule 仍锁仓库）——数据面改走对象存储总线（§9）；直连低延迟需求留 P3，经 D13 提案机制反馈 |
+| **DCNet** | 张量网络传输框架（DCinfer 仓库内模块，出站已建成） | **2026-09-07 修正：不启用**（`DCINFER_BUILD_DCNET=OFF`，submodule 仍锁仓库）——数据面改走对象存储总线（§9）；直连低延迟需求留 P3，经 D13 提案机制反馈 |
 | **调度器策略参考** | 成熟 C++ 调度器实现（打分调度 / 多级优先级队列防饥饿 / 异步播种-收割 sowing·harvesting / 结果保质期 shelf_life） | **策略参考**，不引入代码依赖 |
 | **yunzone-service-kit** | TS/Node 集群基础设施（`/registry` `/ops` `/auth` `/config` `/db` `/storage` `/points` `/app`；`next` 为 optional peer） | 控制面**必然依赖**，生态集成落点见 [server/DESIGN.md](./server/DESIGN.md) §3 |
 
@@ -84,7 +84,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 | V6 | 心跳语义 | 全量能力随心跳（默认 30s / TTL 90s 可配），注册仅首次握手 | [client/DESIGN.md](./client/DESIGN.md) |
 | V7 | 状态回传 | 控制面轮询 GET sidecar `/status`（探活一体，无反向鉴权面） | [server/DESIGN.md](./server/DESIGN.md) |
 | V8 | 数据面大载荷 | 一切张量以 URI + 元数据寻址，不经服务器转发、不进 TS 控制面 | 本文 §9 |
-| V9 | DCNet | **不启用**（BUILD_DCNET=OFF）；P3 直连需求走 D13 提案机制 | 本文 §2 |
+| V9 | DCNet | **不启用**（DCINFER_BUILD_DCNET=OFF）；P3 直连需求走 D13 提案机制 | 本文 §2 |
 | V10 | 引擎运行时 | 首版仅 ONNX Runtime（复用 DCinfer OnnxRuntime 引擎适配器）；TensorRT 后置 | [client/DESIGN.md](./client/DESIGN.md) |
 | V11 | CLI↔daemon 管控 | loopback HTTP + 随机 token（与 D16 同构） | [client/DESIGN.md](./client/DESIGN.md) |
 | V12 | 对拍拓扑 | 两段式：P0 本机多进程 + 本地对象存储替身；P1 末真双机验收 | 本文 §9 |
@@ -150,7 +150,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
   - **无共享 C++ core**：两 C++ 工程各自维护封装 glue（引擎适配 / 总线交互）；共享语义靠 `contracts/` codegen 收口（D14/D15）。
 - **CI（跨平台，D17）**：双轨 pnpm（ts-check / vitest / build）+ CMake（ctest），跑 **OS 矩阵**（windows-latest + ubuntu-latest）；工具链需专门搭建。
 - **文档惯例**：`DESIGN.md`（本文，全局架构 + 阶段权威）+ **各子项目 `DESIGN.md`（下沉决策权威）** + `AGENTS.md`（协作边界）+ 纳入 `CouplingRecord` 记录机制。
-- **依赖锁定**：DCinfer（含 DCIr / DCNet 模块）以 submodule / vcpkg 锁版本（D5：`suzvka/DCinfer`），落实"只复用不修改"（D13）；`BUILD_DCNET=OFF`（V9），引擎适配器按需启用（client：OnnxRuntime；sidecar：视本地节点引擎需求）。
+- **依赖锁定**：DCinfer（含 DCIr / DCNet 模块）以 submodule / vcpkg 锁版本（D5：`suzvka/DCinfer`），落实"只复用不修改"（D13）；`DCINFER_BUILD_DCNET=OFF`（V9），引擎适配器按需启用（client：OnnxRuntime；sidecar：视本地节点引擎需求）。
 
 ## 11. 主要风险与对策（承接开题 §6，补双平面新增项）
 

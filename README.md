@@ -1,6 +1,6 @@
 # yunzone-infer — 分布式推理资源池
 
-> 状态：**P0 奠基（仓库骨架）** · 全局设计权威见 [DESIGN.md](./DESIGN.md)（子项目决策见 [server](./server/DESIGN.md) / [client](./client/DESIGN.md) / [contracts](./contracts/DESIGN.md)）· 立项见 [开题文档.md](./开题文档.md)
+> 状态：**P1 单跳闭环（实现中）**——P0 奠基已收口（骨架 / 双轨 CI / contracts codegen / sidecar 最小实现 / 数据面总线闭环 / 对拍骨架，Windows 半边已实证）；P1 已落：custom server 同端口 WS 下发（V5）/ /auth 机器凭证（V3）/ 推理入口（检视→绑定→派发）/ kit /storage 预签名数据面（MinIO 对拍）/ 反压与判死重派（D9/D7）/ admin 控制台 / client daemon 核心 · 全局设计权威见 [DESIGN.md](./DESIGN.md)（子项目决策见 [server](./server/DESIGN.md) / [client](./client/DESIGN.md) / [contracts](./contracts/DESIGN.md)）· 立项见 [开题文档.md](./开题文档.md)
 
 「服务器持有推理图、客户端持有算力」的分布式推理系统：把分散算力组织成可被统一检视、统一调度的推理资源池。以**叠加层**方式构建，**只复用不修改** DCinfer（DCNet 不启用，数据面走对象存储总线）。
 
@@ -11,7 +11,7 @@
 | [`contracts/`](./contracts) | JSON Schema + codegen | 协议契约**单一事实源**（能力声明 / 控制通道 API / IPC 线格式 / 错误码）→ 生成 TS 类型 + C++ 结构（D15） |
 | [`server/`](./server) | Next.js（TS）+ C++ sidecar | **控制面**（生态集成 + 调度编排 + 3 受众 UI）+ **执行面**（DCinfer 图执行 / 聚合 / 对象存储总线驱动，sidecar 子进程） |
 | [`client/`](./client) | 纯 C++（CMake + vcpkg） | 算力提供者工作后端：**daemon**（注册/心跳/WS 收任务/InferGraph 单节点驱动执行/总线交互）+ **CLI** 控制 + installer 分发（D18） |
-| [`external/`](./external) | git submodule | [DCinfer](https://github.com/suzvka/DCinfer)（内含 DCIr / DCNet）锁版本引入（D17 依赖锁定，只复用不修改；`BUILD_DCNET=OFF`） |
+| [`external/`](./external) | git submodule | [DCinfer](https://github.com/suzvka/DCinfer)（内含 DCIr / DCNet）锁版本引入（D17 依赖锁定，只复用不修改；`DCINFER_BUILD_DCNET=OFF`） |
 
 ## 两条通道（DESIGN §3，不可混用）
 

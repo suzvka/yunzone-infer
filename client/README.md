@@ -23,11 +23,11 @@
 ## 关键约束
 
 - **无 DCNet / 无监听端**（V9）：原变体 A 监听端已退役；任务经 WS 通知 + 总线自取，client 不被出站直驱。
-- **DCinfer 本地执行编排层**（V10 + D10 修订，2026-09-07）：InferGraph 单节点驱动（模型→图内节点；端点 = 图拓扑，端点封装意图见 [DESIGN.md](./DESIGN.md) §1）+ OnnxRuntime 引擎适配器（`BUILD_ENGINES=ON`）；执行表面已经 P0 spike 实证（`probe/`）。
+- **DCinfer 本地执行编排层**（V10 + D10 修订，2026-09-07）：InferGraph 单节点驱动（模型→图内节点；端点 = 图拓扑，端点封装意图见 [DESIGN.md](./DESIGN.md) §1）+ OnnxRuntime 引擎适配器（`DCINFER_BUILD_ENGINES=ON`）；执行表面已经 P0 spike 实证（`probe/`）。
 - **任务队列**（qingge-api TaskPool 模式，§3.5）：per-model 多级优先级 + 过量注入满负荷 + 标记式懒惰撤销 + 配置静态深度上限 + 余量软反压；**无任务级超时**（取消 / 判死重派覆盖）；显存水位终端级上报（供后续自动拉取模型部署）。
 - **信任边界**（security §1）：client 属**不信任域**；**禁自助触发 deposit**（收益 / 存入只在 server，D19）；注册鉴权（V3 强制，不收硬件指纹）+ 结果验证在控制面。
 - **难度系数**（D12/V13）：按模型元数据难度钩子计算并随完成上报；市场机制约束，无审计。
 
 ## 构建与分发
 
-CMake + vcpkg（`vcpkg.json`）；DCinfer（含 DCIr）经 `../external/` submodule（`BUILD_ENGINES=ON`，`BUILD_DCNET=OFF`）。分发经 **installer**（D18：WiX/NSIS · deb/rpm · pkg）；首版引擎运行时仅 ONNX Runtime（V10，随构建引入）。跨平台见 DESIGN D17。
+CMake + vcpkg（`vcpkg.json`）；DCinfer（含 DCIr）经 `../external/` submodule（`DCINFER_BUILD_ENGINES=ON`，`DCINFER_BUILD_DCNET=OFF`）。分发经 **installer**（D18：WiX/NSIS · deb/rpm · pkg）；首版引擎运行时仅 ONNX Runtime（V10，随构建引入）。跨平台见 DESIGN D17。

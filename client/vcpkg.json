@@ -1,7 +1,7 @@
 {
   "name": "infer-client",
   "version": "0.0.0",
-  "description": "yunzone-infer 算力后端 C++ 依赖（daemon + CLI）；DCinfer（含 DCIr/DCNet/引擎适配器）经 ../external submodule 引入，不在此列；onnxruntime 为 DCinfer OnnxRuntime 引擎适配器（BUILD_ENGINES=ON，V10）的传递依赖",
+  "description": "yunzone-infer 算力后端 C++ 依赖（daemon + CLI）；DCinfer（含 DCIr/DCNet/引擎适配器）经 ../external submodule 引入，不在此列；onnxruntime 为 DCinfer OnnxRuntime 引擎适配器（BUILD_ENGINES=ON，V10）的传递依赖；zlib/minizip 为 DCIr 序列化（模型打包）依赖，与 server/sidecar/vcpkg.json 对齐",
   "dependencies": [
     "nlohmann-json",
     "onnxruntime",
@@ -9,6 +9,8 @@
       "name": "poco",
       "features": ["netssl"]
     },
-    "cli11"
+    "cli11",
+    "zlib",
+    "minizip"
   ]
 }

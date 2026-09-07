@@ -6,11 +6,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 基础工程（../external/ submodule，suzvka/DCinfer；只复用不修改，DESIGN D13/D17）
-# client 用途＝本地执行编排层（V10 + D10 修订：InferGraph 单节点驱动）：BUILD_ENGINES=ON 启用 OnnxRuntime 引擎适配器；BUILD_DCNET=OFF（V9）
+# client 用途＝本地执行编排层（V10 + D10 修订：InferGraph 单节点驱动）：
+#   DCINFER_BUILD_ENGINES=ON 启用 OnnxRuntime 引擎适配器；DCINFER_BUILD_DCNET=OFF（V9）；
+#   BUILD_ENGINE_BUILTIN=ON：对拍 stub / 算子表需要 DCEngine::Builtin（daemon/stub_model.hpp），
+#   引擎子开关保留原名（上游迁移 DCINFER_BUILD_* 时仅顶层选项入命名空间）；
+#   与 server/sidecar/CMakeLists.txt 的开关组合对齐（同一 DCinfer 两消费语境，上游 a59185f）
 set(DCINFER_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../external/DCinfer)
 if(EXISTS ${DCINFER_ROOT}/CMakeLists.txt)
-    set(BUILD_ENGINES ON CACHE BOOL "" FORCE)
-    set(BUILD_DCNET OFF CACHE BOOL "" FORCE)
+    set(DCINFER_BUILD_ENGINES ON CACHE BOOL "" FORCE)
+    set(BUILD_ENGINE_BUILTIN ON CACHE BOOL "" FORCE)
+    set(DCINFER_BUILD_DCNET OFF CACHE BOOL "" FORCE)
     add_subdirectory(${DCINFER_ROOT} ${CMAKE_BINARY_DIR}/dcinfer)
 else()
     message(WARNING "external/DCinfer 未就位（git submodule update --init --recursive）；client 以占位形态构建")

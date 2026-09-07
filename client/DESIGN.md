@@ -27,12 +27,14 @@ client/                       # 纯 C++（CMake + vcpkg，submodule 引 DCinfer�
 
 **纯 C++**：DCinfer InferGraph 单节点驱动（本地执行编排层）+ 轻量 REST/WS 客户端 + 对象存储总线交互。不消费 service-kit（纯 TS 库，且 client 属不信任域）。**无共享 C++ core**（D14→根）：与 `server/sidecar` 各自维护封装 glue；共享语义靠 [contracts/DESIGN.md](../contracts/DESIGN.md) codegen 收口。
 
-- **DCinfer 本地执行编排层**（V10 引擎运行时不变；2026-09-07 决策访谈修订）：复用 DCinfer `InferGraph` + `EngineRegistry` + **OnnxRuntime 引擎适配器**（`BUILD_ENGINES=ON`）。执行形态 = **InferGraph 单节点驱动**（模型→图内节点；端点 = 图拓扑，端点封装意图见 §1 修订注）；per-model 分组互斥可用 `declareSubgraph` / `registerGroupLimit` 承载（P1 细化）。P0 spike 已实证 Node/EngineRegistry 独立表面与任务级隔离（`probe/` 12/12）——Node 直驱薄包装保留为**备选执行面**；**不动 DCinfer 本体**（D13）。`BUILD_DCNET=OFF`（V9）。
+- **DCinfer 本地执行编排层**（V10 引擎运行时不变；2026-09-07 决策访谈修订）：复用 DCinfer `InferGraph` + `EngineRegistry` + **OnnxRuntime 引擎适配器**（`DCINFER_BUILD_ENGINES=ON`）。执行形态 = **InferGraph 单节点驱动**（模型→图内节点；端点 = 图拓扑，端点封装意图见 §1 修订注）；per-model 分组互斥可用 `declareSubgraph` / `registerGroupLimit` 承载（P1 细化）。P0 spike 已实证 Node/EngineRegistry 独立表面与任务级隔离（`probe/` 12/12）——Node 直驱薄包装保留为**备选执行面**；**不动 DCinfer 本体**（D13）。`DCINFER_BUILD_DCNET=OFF`（V9）。
 - **任务队列**（§3.5）：per-model 多级优先级队列（qingge-api TaskPool 模式），过量注入缓冲保持满负荷；标记式懒惰撤销；配置静态深度上限；反压余量上报。
 - **能力声明直出**（D6 消费侧）：启动时 EngineRegistry 注册引擎 → 枚举 Descriptor 生成能力声明，与 server 检视端**运行时同构**，契约漂移风险归零。
 - **REST/WS 客户端 + 预签名下载**：Poco（vcpkg `poco[netssl]`，REST + WS + HTTPS）；JSON：nlohmann-json；CLI 框架：CLI11（见 [vcpkg.json](./vcpkg.json)）。
 
 ### D18 — client 形态与分发：daemon + CLI 双二进制 + installer
+
+> **P1 落地注记（2026-09-07）**：daemon 核心已落（`daemon/src/`：config / task_queue / engine_runner / http_io / ws_client / daemon 编排）——CLI 管控（V11）与 qingge-api 完整队列老化算法（alpha 平滑 / 阈值提升 / survival_count）**后置 P2**；配置来源 = `--config` JSON 文件（`daemon/config.example.json`）；模型获取 P1 = 配置内嵌引擎类型（对拍 stub 同语义副本，D14），总线 model pull P2。
 
 | 产物 | 目录 | 形态 | 职责 |
 |---|---|---|---|

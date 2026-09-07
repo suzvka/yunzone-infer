@@ -83,7 +83,7 @@ jobs:
       - name: Bootstrap vcpkg (Linux)
         if: runner.os == 'Linux'
         run: "${{ runner.temp }}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
-      - name: Configure（消费语境；sidecar 自带 manifest，DCinfer 自带测试纳入 ctest 回归，上游 27e9c7d 修复后消费语境可用）
+      - name: Configure（消费语境；sidecar 自带 manifest，DCinfer 自带测试纳入 ctest 回归；上游 a59185f 起子工程消费时测试/示例默认关，sidecar CMakeLists 已显式 DCINFER_BUILD_TESTS=ON）
         run: >
           cmake -S server/sidecar -B build/sidecar
           -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake
@@ -98,3 +98,22 @@ jobs:
       - name: 冒烟运行（Linux）
         if: runner.os == 'Linux'
         run: ./build/sidecar/infer-sidecar
+      # P0 对拍 e2e（§9②：确定性对拍，作为验收自动化载体）：
+      # serve + 对象存储总线替身 + endpoint-stub（分布式半边）vs run-local（单机半边）逐节点比对。
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm codegen
+      - name: 对拍 e2e（Windows）
+        if: runner.os == 'Windows'
+        run: pnpm --filter @yunzone-infer/server exec vitest run tests/parity-bus-spike.test.ts
+        env:
+          INFER_SIDECAR_BIN: ${{ github.workspace }}\build\sidecar\Release\infer-sidecar.exe
+      - name: 对拍 e2e（Linux）
+        if: runner.os == 'Linux'
+        run: pnpm --filter @yunzone-infer/server exec vitest run tests/parity-bus-spike.test.ts
+        env:
+          INFER_SIDECAR_BIN: ${{ github.workspace }}/build/sidecar/infer-sidecar

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "EndpointCapability",
-  "description": "能力声明（端点语义，contracts/DESIGN §3，2026-09-07 重定）：模型清单 + per-model 队列余量 + 终端级显存水位。注册与心跳全量携带（V6，默认 30s / TTL 90s），server 每跳覆盖能力视图。已废止：并发容量字段（队列模型替代）、引擎类型/端口形状端点级声明（并入模型元数据）、每模型显存（改终端级水位）。",
+  "description": "能力声明（端点语义，contracts/DESIGN §3，2026-09-07 重定）：模型清单 + per-model 队列余量 + 终端级显存水位 + per-model 张量 IO 规则（2026-09-07 当日增补：server 结构化检视的输入，见 §3 修订）。注册与心跳全量携带（V6，默认 30s / TTL 90s），server 每跳覆盖能力视图。已废止：并发容量字段（队列模型替代）、引擎类型/端口形状端点级声明（并入模型元数据）、每模型显存（改终端级水位）。",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "models", "vramFreeBytes"],
@@ -34,12 +34,71 @@
         "modelKey": {
           "type": "string",
           "minLength": 1,
-          "description": "可服务模型清单键（/storage 产物键）；引擎兼容性 / 端口形状由模型元数据（DCIr 产物）承载，端点不重复声明。检视 = 图节点模型引用 ∈ 本清单（布尔判断，不满足拒绝启动）"
+          "description": "可服务模型清单键（/storage 产物键）。检视 = 图节点模型引用 ∈ 本清单（节点存在性）+ 端口结构匹配（io 声明 × DCIr 图节点端口）"
         },
         "queueRemaining": {
           "type": "integer",
           "minimum": 0,
           "description": "per-model 任务队列余量（任务数）。每模型队列深度上限为端点配置静态值（不上报）；反压 = 余量软控制：server 注入前查余量，满则暂缓推送（client/DESIGN §3.5）"
+        },
+        "io": {
+          "$ref": "#/definitions/ModelTensorIo",
+          "description": "张量 IO 规则（2026-09-07 增补，可选）：该模型的输入/输出端口声明，端口编码与 DCIr 端口序列化逐字段同构（name/tensorType/typeSize/shape/required；shape 允许 -1 动态维度，DCIr int64 直通语义）。client 经 EngineRegistry 实例直出（D6 运行时同构，声明即执行面，漂移归零）；server 结构化检视消费（图需求端口 × 声明端口匹配，不满足 E_INSPECTION_REJECTED）。终权在 /storage 模型产物（P2 可加产物 hash 对照）"
+        }
+      }
+    },
+    "ModelTensorIo": {
+      "title": "ModelTensorIo",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "outputs"],
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IoPort"
+          },
+          "description": "输入端口声明（与 DCIr 图节点 inputs 同编码）"
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IoPort"
+          },
+          "description": "输出端口声明（与 DCIr 图节点 outputs 同编码）"
+        }
+      }
+    },
+    "IoPort": {
+      "title": "IoPort",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tensorType", "typeSize", "shape", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "端口名（与 DCIr 图内端口名一致）"
+        },
+        "tensorType": {
+          "type": "string",
+          "description": "张量类型标签（与 DCIr TensorMeta::typeToString 同集，如 Float）"
+        },
+        "typeSize": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "单元素字节数"
+        },
+        "shape": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "形状声明（各维长度；-1 = 动态维度，对齐 DCIr int64 直通语义）"
+        },
+        "required": {
+          "type": "boolean",
+          "description": "是否必选端口（对齐 DCIr Node::Port.required）"
         }
       }
     }

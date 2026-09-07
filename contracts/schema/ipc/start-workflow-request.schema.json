@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "StartWorkflowRequest",
-  "description": "IPC：控制面 → sidecar 启动工作流（POST /workflows）。鉴权：x-ipc-token header（D16：每次启动随机 token）。执行面职责：DCIr 反序列化重建图 → 按 bindingPlan 把节点标记为远程 → 数据驱动执行本地节点 → 远程节点组装任务描述（经 /status 轮询被控制面取走下发）。",
+  "description": "IPC：控制面 → sidecar 启动工作流（POST /workflows）。鉴权：x-ipc-token header（D16：每次启动随机 token）。执行面职责：DCIr 反序列化重建图 → 按 bindingPlan 把节点标记为远程 → 数据驱动执行本地节点 → 远程节点组装任务描述（经 /status 轮询被控制面取走下发）。2026-09-07 P0 落地增补（可选字段，非破坏性，域版本维持 1）：RemoteNodeBinding.inputs（pendingDispatch 组装的输入对象来源）+ finalOutputUri（最终输出上传目标）。",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "workflowId", "graph", "bindingPlan"],
@@ -22,6 +22,18 @@
     },
     "bindingPlan": {
       "$ref": "#/definitions/BindingPlan"
+    },
+    "finalOutputUri": {
+      "type": "string",
+      "minLength": 1,
+      "description": "最终输出上传目标（控制面签发 URL：正式语义 = /storage 预签名 PUT URL，D20/V8；P0 本地对象存储替身为直连 URL）。sidecar 聚合完毕后 PUT 张量至此，并把该 URI 回填到 WorkflowStatusSnapshot.finalOutputUri"
+    },
+    "workflowInputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/GraphInput"
+      },
+      "description": "图级输入取值（2026-09-07 增补）：DCIr 只声明 inputBindings 不携带值，指向本地节点的图级输入由 sidecar 在提交前从总线拉取并注入（D8/数据驱动）；uri 为控制面已签发的 GET URL（双语义规则：sidecar 主动发起 HTTP IO 的字段一律为 URL）。指向远程节点的输入不经此字段（其取值由端点自取，见 RemoteNodeBinding.inputs）"
     }
   },
   "definitions": {
@@ -60,6 +72,54 @@
           "type": "string",
           "minLength": 1,
           "description": "该节点输出上传目标（对象存储 URI；预签名 URL 由控制面在派发时签发——URI 语义为对象键，控制面据其签 URL，避免长任务预签名过期）"
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RemoteNodeInput"
+          },
+          "description": "该远程节点各输入端口的总线对象 URI（2026-09-07 增补）：sidecar 组装 pendingDispatch.inputUri 的唯一来源（sidecar 不感知总线寻址）。P0 限制：至多 1 项（TaskDispatch.inputUri 单值），且输入须为控制面预先上传的图级输入对象；本地节点 → 远程节点的边（sidecar 上传中转）为 P1 扩展"
+        }
+      }
+    },
+    "RemoteNodeInput": {
+      "title": "RemoteNodeInput",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["port", "uri"],
+      "properties": {
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "远程节点输入端口名（与 graph 内端口声明一致）"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "输入张量所在的对象存储 URI（对象键语义；控制面派发时替换为预签名 GET URL）"
+        }
+      }
+    },
+    "GraphInput": {
+      "title": "GraphInput",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "port", "uri"],
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1,
+          "description": "图级输入绑定的节点名（须为本地节点）"
+        },
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "图级输入端口名（与 graph.inputBindings 一致）"
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "输入张量所在的对象存储 URI（控制面已签发的 GET URL；sidecar 提交前拉取并注入）"
         }
       }
     }

@@ -68,4 +68,4 @@ cmake --build build/sidecar --config Release
 INFER_SIDECAR_BIN=build/sidecar/infer-sidecar pnpm --filter @yunzone-infer/server exec vitest run tests/parity-bus-spike.test.ts
 ```
 
-P1 真链路对拍（本机五进程）：custom server + sidecar（`SIDECAR_BIN`）+ `infer-clientd`（WS 在线 + 能力直出）+ MinIO（S3 env）→ 消费者按 server 对象键规则预置输入（`workflows/{id}/inputs/{node}/{port}`）→ 提交对拍图 → 聚合结果 vs `run-local` 逐节点比对。
+P1 真链路对拍（本机五进程，已实测通过 2026-09-08）：custom server（`SIDECAR_BIN`，instrumentation 拉起 sidecar）+ `infer-clientd`（WS 在线 + 能力直出）+ 总线（MinIO 配 S3 env；本机无 docker 时可起任意 GET/PUT `/objects/{key}` 内存替身，bus-signer 默认直链 127.0.0.1:43120）→ 消费者两步流：① 按键规则预置输入（`workflows/{id}/inputs/{node}/{port}`，首个上传签名调用即开账）② 提交（自带 `workflowId`，`localInputs` 只声明 sidecar 本地执行节点的输入——远程节点输入由 scheduler 自动枚举为 TaskDispatch 键）→ 轮询 `GET /api/infer/workflows/{id}`（completed 含 `finalOutputUrl`）→ `nodes/{node}/output` 取回远程节点输出 → vs `run-local` 逐节点比对（对拍图 x=3 → y=7 → sum=17，双半边精确一致）。

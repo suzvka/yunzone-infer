@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InputUploadUrlResponse",
+  "description": "图级输入上传预签名响应（GET /api/infer/workflows/{workflowId}/uploads/{node}/{port}；消费者两步流第 2 步：先按键规则预置输入对象，再提交工作流。键规则 workflows/{id}/inputs/{node}/{port} 由控制面 planObjectKeys 统一，D19 消费者通道；S3 模式为 kit getUploadUrl 预签名，替身模式为直链）。非 registered 态回 E_WORKFLOW_STATE_CONFLICT。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "node", "port", "uploadUrl"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "consumer-channel 域契约版本"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "type": "string",
+      "minLength": 1,
+      "description": "图节点名（与提交图 nodes[].name 对应）"
+    },
+    "port": {
+      "type": "string",
+      "minLength": 1,
+      "description": "节点输入端口名（与该节点 inputs[].name 对应）"
+    },
+    "uploadUrl": {
+      "type": "string",
+      "description": "PUT 预签名 URL（请求体 = float32 裸字节张量，V8：张量不进 JSON）"
+    }
+  }
+}

@@ -262,7 +262,7 @@ function emitEnum({ name, values, desc }) {
   for (const v of values) {
     lines.push(`    if (s == "${v}") { v = ${name}::${cppSafeIdent(v)}; return; }`);
   }
-  lines.push(`    throw nlohmann::json::other_error(501, ("unknown ${name} value: " + s).c_str());`);
+  lines.push(`    throw nlohmann::json::other_error::create(501, "unknown ${name} value: " + s, nullptr);`);
   lines.push('}');
   return lines;
 }
@@ -311,10 +311,10 @@ function emitStruct({ name, schema, desc }, ctx) {
     const constVal = ft.ps.const;
     if (ft.isReq && !ft.isNull) {
       if (constVal !== undefined) {
-        // 字符串 const 不带引号嵌入消息（避免截断 C++ 字面量）；消息为纯字面量（const char*，适配 nlohmann 3.12 构造签名）
+        // 字符串 const 不带引号嵌入消息（避免截断 C++ 字面量）；nlohmann 3.12+ 异常构造函数私有，经静态 create 构造
         const constDisplay = typeof constVal === 'string' ? constVal : String(constVal);
         lines.push(`    if (j.at(${key}) != ${JSON.stringify(constVal)}) {`);
-        lines.push(`        throw nlohmann::json::other_error(501, "invalid value for ${name}.${k} (const ${constDisplay})");`);
+        lines.push(`        throw nlohmann::json::other_error::create(501, "invalid value for ${name}.${k} (const ${constDisplay})", nullptr);`);
         lines.push('    }');
       }
       lines.push(`    v.${ident} = j.at(${key}).get<${ft.t}>();`);

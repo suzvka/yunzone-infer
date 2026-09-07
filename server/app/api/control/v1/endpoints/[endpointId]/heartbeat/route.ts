@@ -7,7 +7,7 @@
  */
 
 import type { EndpointCapability, HeartbeatResponse } from "@/lib/contracts";
-import { requireMachineToken } from "@/lib/control-auth";
+import { requireMachineAuth } from "@/lib/control-auth";
 import { getEndpointRegistry } from "@/lib/endpoint-registry";
 import { jsonError } from "@/lib/responses";
 
@@ -15,8 +15,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ endpointId: string }> }
 ): Promise<Response> {
-  const auth = requireMachineToken(request);
-  if (auth) return auth;
+  const auth = await requireMachineAuth(request);
+  if (auth instanceof Response) return auth;
   const { endpointId } = await params;
 
   let capability: EndpointCapability;

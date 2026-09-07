@@ -1,6 +1,6 @@
 # server/app/ — Next.js App Router
 
-> 骨架已落（2026-09-07）：`layout` / `page` / `api/control/v1` 四端点 / `api/ops/report`；**三受众 UI（route groups）与 WS 推送留 P1**。house Next 16.1.1 包内无 `dist/docs/`（见 CouplingRecord）——遵循保守 API 面，以 build/ts-check 反馈为准。
+> 骨架已落（2026-09-07）：`layout` / `page` / `api/control/v1` 四端点 / `api/ops/report`；**P1 已追加**：`admin/` 管理控制台（D19②）+ `api/ops/login` / `api/ops/workflows` + `api/infer/workflows`（推理入口）+ WS upgrade（`api/control/v1/ws`，custom server 同端口）；**消费者 / 提供者完整 UI（route groups）留 P2**。house Next 16.1.1 包内无 `dist/docs/`（见 CouplingRecord）——遵循保守 API 面，以 build/ts-check 反馈为准。
 
 ## 规划路由树（对照 [server/DESIGN.md](../DESIGN.md) §1 控制面 + D19 三受众）
 

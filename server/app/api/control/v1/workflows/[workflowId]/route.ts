@@ -1,12 +1,13 @@
 /**
- * GET /api/control/v1/workflows/{workflowId} — 工作流状态查询
+ * GET /api/control/v1/workflows/{workflowId} — 工作流状态查询（机器面）
  *
- * 契约：WorkflowStatus（状态机：登记→检视→绑定→派发→执行→回推→聚合）；
- * 未找到 404 + E_WORKFLOW_NOT_FOUND。骨架期账本为空（状态推进入口 P1）。
+ * 契约：WorkflowStatus；未找到 404 + E_WORKFLOW_NOT_FOUND。
+ * P1 聚合：ledger × sidecar 快照联动（advanceWorkflowStatus 共享实现，
+ * lib/workflow-status.ts——消费者结果端点同款推进语义）。
  */
 
 import type { WorkflowStatus } from "@/lib/contracts";
-import { getWorkflowLedger } from "@/lib/workflow-ledger";
+import { advanceWorkflowStatus } from "@/lib/workflow-status";
 import { jsonError } from "@/lib/responses";
 
 export async function GET(
@@ -14,19 +15,20 @@ export async function GET(
   { params }: { params: Promise<{ workflowId: string }> }
 ): Promise<Response> {
   const { workflowId } = await params;
-  const record = getWorkflowLedger().get(workflowId);
-  if (!record) {
+  const updated = await advanceWorkflowStatus(workflowId);
+  if (!updated) {
     return jsonError("E_WORKFLOW_NOT_FOUND", `workflow "${workflowId}" not found`, 404);
   }
+
   const payload: WorkflowStatus = {
     version: 1,
-    workflowId: record.workflowId,
-    status: record.status,
-    ...(record.errorCode !== undefined ? { errorCode: record.errorCode } : {}),
-    ...(record.finalOutputUri !== undefined
-      ? { finalOutputUri: record.finalOutputUri }
+    workflowId: updated.workflowId,
+    status: updated.status,
+    ...(updated.errorCode !== undefined ? { errorCode: updated.errorCode } : {}),
+    ...(updated.finalOutputUri !== undefined
+      ? { finalOutputUri: updated.finalOutputUri }
       : {}),
-    updatedAtMs: record.updatedAtMs,
+    updatedAtMs: updated.updatedAtMs,
   };
   return Response.json(payload);
 }

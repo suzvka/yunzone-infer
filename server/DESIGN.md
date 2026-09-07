@@ -46,6 +46,8 @@ TS/Next 控制面（生态集成 + 调度编排）+ C++ DCinfer 执行面（图�
 
 非 serverless/edge：需**长连接 + 拉起 sidecar + 持状态**。
 
+**启动形态补记（2026-09-07 P1 拍板）**：WS 任务下发（V5）以 **custom server 同端口 upgrade** 承载（Next 无 WS route handler）——`server/server.ts` 包 Next handler + ws 挂 `upgrade`（路径 `/api/control/v1/ws`），dev=`next({dev:true})` / prod=`NODE_ENV=production tsx server.ts`；standalone（`output:"standalone"`）保留为回退形态（custom server 与 house Next 16 兼容性问题时的退路）。D11 核心语义不变：node runtime 自托管 + 持状态。
+
 ### D16 — IPC 定案：HTTP over loopback TCP + JSON + 启动随机 token
 
 选 loopback TCP（localhost:port）而非 UDS/named pipe 以**跨平台单一实现**（D17→根）；选 HTTP+JSON 而非 gRPC 以对齐 D15 契约（→contracts）。详见 §4。
@@ -116,6 +118,7 @@ deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧�
 ## 6. 待确认（原根 DESIGN §12 中 server 相关项）
 
 - ~~§12.4 客户端注册是否需鉴权~~ **已定（V3，2026-09-07）**：P1 即强制 `/auth` 机器凭证；影响控制通道端点与 client `register`。
+  **开发/CI 态降级（P1 拍板）**：`AUTH_CENTER_BASE_URL` 未配置 → introspect 跳过、控制通道放行 + 进程级一次性告警（生产部署必须配置，「强制」由配置纪律保证）；鉴权中心不可达 → fail-closed 503；`INFER_AUTH_PRODUCT_ID` 配置后校验凭证 productId（防跨产品凭证）。accountId 绑定时机 = 注册（introspect `claims.accountId` 自报，v1.6 token 契约）。
 - ~~§12.6 /points 计量维度~~ 方向**已定（V13，2026-09-07）**：模型报价（单价 × 难度钩子），P2 起启用；deposit 门禁不变（D12）。
 - ~~§12.7 sidecar 生命周期~~ **已定（2026-09-07 确认）**：Next `instrumentation` 启动时拉起 + 崩溃重启（根 §11「双平面 IPC 故障域」）；**状态回传走控制面轮询 `/status`（V7）**；独立部署形态后置。
 

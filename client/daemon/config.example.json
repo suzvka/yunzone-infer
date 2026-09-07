@@ -1,0 +1,13 @@
+{
+  "serverBaseUrl": "http://127.0.0.1:3002",
+  "machineToken": "dev-machine-token",
+  "endpointId": "ep-local-1",
+  "heartbeatIntervalSeconds": 30,
+  "models": [
+    {
+      "modelKey": "models/p0-stub",
+      "engineType": "P0StubModel",
+      "maxQueueDepth": 8
+    }
+  ]
+}

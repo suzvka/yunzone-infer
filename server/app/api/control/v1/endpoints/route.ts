@@ -2,12 +2,13 @@
  * POST /api/control/v1/endpoints — 端点注册（控制通道，V3/V6）
  *
  * 契约：contracts control-channel 域（RegisterRequest → RegisterResponse；
- * 失败 → errors 域 ErrorEnvelope）。鉴权：Authorization: Bearer 机器凭证（骨架期
- * 存在性校验，/auth introspect P1 接入）。
+ * 失败 → errors 域 ErrorEnvelope）。鉴权：机器凭证（V3 P1 即强制；
+ * AUTH_CENTER_BASE_URL 未配置时放行告警，见 lib/control-auth）。
+ * accountId 绑定时机 = 注册（introspect claims.accountId 自报）。
  */
 
 import type { RegisterRequest, RegisterResponse } from "@/lib/contracts";
-import { requireMachineToken } from "@/lib/control-auth";
+import { requireMachineAuth } from "@/lib/control-auth";
 import {
   DEFAULT_HEARTBEAT_INTERVAL_S,
   getEndpointRegistry,
@@ -15,8 +16,8 @@ import {
 import { jsonError } from "@/lib/responses";
 
 export async function POST(request: Request): Promise<Response> {
-  const auth = requireMachineToken(request);
-  if (auth) return auth;
+  const auth = await requireMachineAuth(request);
+  if (auth instanceof Response) return auth;
 
   let body: RegisterRequest;
   try {
@@ -37,7 +38,8 @@ export async function POST(request: Request): Promise<Response> {
 
   const result = getEndpointRegistry().registerEndpoint(
     body.endpointId,
-    body.capability
+    body.capability,
+    auth.accountId
   );
   if (!result.ok) {
     const status =

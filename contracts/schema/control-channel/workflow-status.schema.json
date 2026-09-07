@@ -26,6 +26,10 @@
       "type": "string",
       "description": "最终输出 URI（聚合完成后回填；控制面仅持元数据 + URI，V8）"
     },
+    "finalOutputUrl": {
+      "type": "string",
+      "description": "最终输出的预签名 GET URL（消费者结果端点签发，status=completed 时携带；与 finalOutputUri 的区别：Uri 为控制面签发的 PUT 形态原样回传，Url 为取回语义）"
+    },
     "updatedAtMs": {
       "type": "integer",
       "description": "状态最后更新时刻（Unix 毫秒）"

@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NodeOutputUrlResponse",
+  "description": "远程节点输出取回预签名响应（GET /api/infer/workflows/{workflowId}/nodes/{node}/output；键规则 workflows/{id}/nodes/{nodeId}/output。输出对象由端点上传、sidecar 聚合消费，消费者可在执行中途或终态取回做逐节点对拍/展示。对象未生成时按此 URL 拉取为存储侧 404）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "workflowId", "node", "outputUrl"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer",
+      "description": "consumer-channel 域契约版本"
+    },
+    "workflowId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "type": "string",
+      "minLength": 1,
+      "description": "远程节点名（TaskDispatch.nodeId）"
+    },
+    "outputUrl": {
+      "type": "string",
+      "description": "GET 预签名 URL（响应体 = float32 裸字节张量，原生端序，V8）"
+    }
+  }
+}

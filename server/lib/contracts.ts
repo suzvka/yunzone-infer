@@ -20,6 +20,8 @@ export type {
   TaskRevoke,
   WorkflowStatus,
   WorkflowLifecycleStatus,
+  InputUploadUrlResponse,
+  NodeOutputUrlResponse,
   StartWorkflowRequest,
   BindingPlan,
   RemoteNodeBinding,

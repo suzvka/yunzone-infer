@@ -4,20 +4,26 @@
 
 服务器双平面的 C++ 半边：**进程隔离**（C++ 崩溃 / 长阻塞不拖垮 Next），由控制面经本地 IPC 拉起并驱动（生命周期：Next `instrumentation` 拉起 + 崩溃重启，2026-09-07 定案）。
 
-## 职责（根 [DESIGN.md](../../DESIGN.md) §3 执行面 / [server/DESIGN.md](../DESIGN.md) §1）
+## 职责（根 [DESIGN.md](../../DESIGN.md) §3 执行面 / [server/DESIGN.md](../DESIGN.md) §1）——P0 已落地
 
-- **图持有 / 重建**：DCIr 反序列化 → 按绑定计划把节点标记为远程（远程节点经**对象存储 URI** 交互，V8）
-- **数据驱动执行**：本地节点（聚合 / 算子）进程内执行；远程节点生成「模型引用 + 输入 URI + 输出上传目标」经控制通道 **WS 下发** client（V5）
-- **聚合**：client 完成上报唤醒 + 对象存储拉取 → 回收结果汇入图执行流，直至产出最终输出（D8 事件驱动）
-- **最终输出**：经 `/storage` 预签名 URL 上传；控制面仅持元数据 + URI（V8）
-- **IPC 端点**：HTTP over loopback TCP + JSON + 每次启动随机 token（D16）；**控制面轮询 `GET /status`（V7，探活一体）**
+- **图持有 / 重建**：DCIr JSON → InferGraph（`graph_builder.cpp`；远程节点物化为 **BusProxy**：outputs-only 节点，RunFn 阻塞等待完成上报 + 总线拉取唤醒，D8）
+- **数据驱动执行**：本地节点（算子 / 聚合）进程内执行（DCinfer Builtin 算子表）；远程节点组装 TaskDispatch（对象键语义）入 pendingDispatches，经 `GET /workflows/{id}/status` 轮询被控制面取走（V7/V5）
+- **聚合**：控制面转发完成通知（`POST /workflows/{id}/node-completions`）→ 拉取输出（签名 URL）→ 唤醒 BusProxy → 数据驱动传播 → 任务完成回调 → PUT finalOutputUri（V8）
+- **IPC 端点**：HTTP over loopback TCP + JSON + 启动 token（D16，`http_io.hpp` 极小实现；两端同仓可控，Poco 收敛随 client P1）；`GET /status` 聚合探活（V7，端口支持 0 = OS 分配回读）
+- **不感知生态**（不消费 service-kit）；控制面**不 link DCinfer**（D3）；**无 DCNet**（V9）
 
-## 契约
+## 源码结构
 
-- 输入：DCIr 序列化图 JSON + 绑定计划（节点 → 远程 URI 语义），来自 `contracts/schema/ipc/`（codegen C++ 头）
-- **不感知生态**（不消费 service-kit）；控制面**不 link DCinfer**（D3 解耦）
-- **无 DCNet**（V9：数据面走对象存储总线，出站直驱退役）
+| 文件 | 职责 |
+|---|---|
+| `src/main.cpp` | 入口：`serve`（IPC 端点 + 路由）/ `run-local`（对拍单机半边：同图全本地执行逐节点落盘） |
+| `src/graph_builder.*` | DCIr JSON → InferGraph（本地节点算子表物化 / 远程节点 BusProxy；P0 限制：仅 1:1 边、远程节点无入边、Float 标量端口） |
+| `src/workflow_run.*` | 工作流运行时（状态机 + pendingDispatch 组装 + D8 唤醒 + 聚合上传 + 错误码映射） |
+| `src/http_io.hpp` | 极小 loopback HTTP 收发（Content-Length + Connection: close；NOMINMAX） |
+| `src/bus_client.hpp` | 总线 GET/PUT（签名 URL，D20 消费语义） |
+| `src/stub_model.hpp` | 对拍 stub 算子 `P0StubModel`（y=x*2+1，单一语义源）+ float32 标量编解码 |
+| `src/endpoint_stub.cpp` | `infer-endpoint-stub` 对拍端点替身（下载→前向→上传→结果 JSON；P1 由真 client daemon 替代，D18） |
 
-## 构建（CMake + vcpkg，骨架期未接线）
+## 构建（CMake + vcpkg）
 
-见 `CMakeLists.txt`。依赖 DCinfer（`external/` submodule，需 `--recursive`）+ contracts codegen 的 C++ 头（`contracts/generated/cpp/`）；`BUILD_DCNET=OFF`（V9）、`BUILD_ENGINES=ON`（本地节点引擎需求，P0 spike 收紧）。`src/main.cpp` 为占位入口；P0 随 IPC 契约落地最小 sidecar。
+见 `CMakeLists.txt`。依赖 DCinfer（`external/` submodule，需 `--recursive`；`BUILD_ENGINE_BUILTIN=ON`）+ contracts codegen 的 C++ 头（`pnpm codegen` 先行）+ vcpkg `nlohmann-json/zlib/minizip`。

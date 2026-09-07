@@ -6,10 +6,10 @@
   "description": "yunzone-infer 服务器：Next.js 全栈控制面（生态集成 + 调度编排 + 3 受众 UI）+ C++ 执行面 sidecar",
   "scripts": {
     "predev": "pnpm --filter @yunzone-infer/contracts codegen",
-    "dev": "next dev -p 3002",
+    "dev": "tsx server.ts",
     "prebuild": "pnpm --filter @yunzone-infer/contracts codegen",
     "build": "next build",
-    "start": "next start -p 3002",
+    "start": "tsx server.ts",
     "prets-check": "pnpm --filter @yunzone-infer/contracts codegen",
     "ts-check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
@@ -20,6 +20,7 @@
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "ws": "^8.21.3",
     "yunzone-service-kit": "^0.25.0",
     "zod": "^4"
   },
@@ -27,8 +28,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^3.2.0"
   },

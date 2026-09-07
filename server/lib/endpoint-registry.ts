@@ -56,17 +56,21 @@ export interface EndpointRegistryOptions {
   now?: () => number;
   /** TTL（毫秒），默认 90s */
   ttlMs?: number;
+  /** TTL 判死回调（D7 重派链路：sweep 出的端点其在途任务重派，instrumentation 装配） */
+  onExpired?: (endpointIds: string[]) => void;
 }
 
 export class EndpointRegistry extends ProviderRegistry<EndpointProvider> {
   private readonly clockNow: () => number;
   private readonly ttlMs: number;
+  private readonly onExpired?: (endpointIds: string[]) => void;
   private readonly entries = new Map<string, EndpointEntry>();
 
   constructor(options: EndpointRegistryOptions = {}) {
     super({ name: "EndpointRegistry" });
     this.clockNow = options.now ?? Date.now;
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+    this.onExpired = options.onExpired;
   }
 
   /** 注册（首次握手建账；重复 id 拒绝，契约 E_ENDPOINT_ALREADY_REGISTERED） */
@@ -130,7 +134,7 @@ export class EndpointRegistry extends ProviderRegistry<EndpointProvider> {
     return entry.capability.models.some((m) => m.modelKey === modelKey);
   }
 
-  /** 注销过期端点（TTL 判死），返回被注销的 endpointId 列表 */
+  /** 注销过期端点（TTL 判死），返回被注销的 endpointId 列表（onExpired 钩子同步触发） */
   sweep(): string[] {
     const now = this.clockNow();
     const expired: string[] = [];
@@ -139,6 +143,10 @@ export class EndpointRegistry extends ProviderRegistry<EndpointProvider> {
         this.entries.delete(id);
         expired.push(id);
       }
+    }
+    if (expired.length > 0) {
+      console.warn(`[endpoint-registry] TTL expired: ${expired.join(", ")}`);
+      this.onExpired?.(expired);
     }
     return expired;
   }
@@ -193,7 +201,12 @@ const globalForRegistry = globalThis as unknown as {
   __inferEndpointRegistry?: EndpointRegistry;
 };
 
-export function getEndpointRegistry(): EndpointRegistry {
-  globalForRegistry.__inferEndpointRegistry ??= new EndpointRegistry();
+/**
+ * 进程级单例（dev 热重载下经 globalThis 保持）。
+ * options 仅首次创建时生效（instrumentation 装配 onExpired 重派钩子；
+ * 路由热重载后二次调用不带参即复用既有实例）。
+ */
+export function getEndpointRegistry(options?: EndpointRegistryOptions): EndpointRegistry {
+  globalForRegistry.__inferEndpointRegistry ??= new EndpointRegistry(options);
   return globalForRegistry.__inferEndpointRegistry;
 }

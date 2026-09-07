@@ -13,6 +13,7 @@
  */
 
 import type { ErrorCode, WorkflowLifecycleStatus } from "./contracts";
+import type { LedgerStore } from "./ledger-store";
 
 /** 工作流账目（WorkflowStatus 响应的存储形态） */
 export interface WorkflowRecord {
@@ -20,8 +21,14 @@ export interface WorkflowRecord {
   status: WorkflowLifecycleStatus;
   errorCode?: ErrorCode;
   finalOutputUri?: string;
-  /** 绑定端点（D9 MVP 整图单端点；空串/缺省 = 纯本地图无端点参与） */
+  /** 绑定端点（D9 MVP 整图单端点；空串/缺省 = 纯本地图无端点参与；分区后为首组端点） */
   endpointId?: string;
+  /** 消费者平台账户（/auth introspect，P2 计费扣款锚点） */
+  consumerAccountId?: string;
+  /** 静态分区绑定摘要（P2 批次 D：nodeId → endpointId JSON，泵按节点解析端点） */
+  bindingsJson?: string;
+  /** 建账时刻（shelf_life 期限基准之一；write-through 恢复用） */
+  createdAtMs?: number;
   updatedAtMs: number;
 }
 
@@ -49,6 +56,30 @@ const LEGAL_TRANSITIONS: Readonly<Record<WorkflowLifecycleStatus, readonly Workf
 
 export class WorkflowLedger {
   private readonly records = new Map<string, WorkflowRecord>();
+  private store: LedgerStore | null = null;
+
+  /**
+   * 挂接持久化存储位（P2 /db write-through）：内存权威不变，每次变更异步落库
+   * （失败告警不抛——状态可经重派/恢复收敛，D7）；启动期 hydrate 后挂接。
+   */
+  attachStore(store: LedgerStore): void {
+    this.store = store;
+  }
+
+  /** 启动恢复：pg 快照填充内存账（仅 hydrate 一次；空快照无操作） */
+  async hydrate(store: LedgerStore): Promise<void> {
+    const { workflows } = await store.loadAll();
+    for (const wf of workflows) {
+      if (!this.records.has(wf.workflowId)) this.records.set(wf.workflowId, wf);
+    }
+  }
+
+  private persist(record: WorkflowRecord): void {
+    if (!this.store) return;
+    void this.store.putWorkflow(record).catch((e) =>
+      console.warn(`[workflow-ledger] persist ${record.workflowId} failed: ${(e as Error).message}`)
+    );
+  }
 
   get(workflowId: string): WorkflowRecord | null {
     return this.records.get(workflowId) ?? null;
@@ -56,7 +87,9 @@ export class WorkflowLedger {
 
   /** 建账 / 无校验覆写（P0 查询端点兼容面；新代码用 transition；updatedAtMs 自管） */
   upsert(record: Omit<WorkflowRecord, "updatedAtMs">): void {
-    this.records.set(record.workflowId, { ...record, updatedAtMs: Date.now() });
+    const full: WorkflowRecord = { ...record, createdAtMs: record.createdAtMs ?? Date.now(), updatedAtMs: Date.now() };
+    this.records.set(record.workflowId, full);
+    this.persist(full);
   }
 
   /**
@@ -86,6 +119,7 @@ export class WorkflowLedger {
       updatedAtMs: Date.now(),
     };
     this.records.set(workflowId, updated);
+    this.persist(updated);
     return updated;
   }
 
@@ -104,4 +138,14 @@ const globalForLedger = globalThis as unknown as {
 export function getWorkflowLedger(): WorkflowLedger {
   globalForLedger.__inferWorkflowLedger ??= new WorkflowLedger();
   return globalForLedger.__inferWorkflowLedger;
+}
+
+/** 启动期接线（instrumentation register）：建表/探活 → 恢复 → write-through 挂接 */
+export async function ensureWorkflowLedger(): Promise<WorkflowLedger> {
+  const { ensureLedgerStore } = await import("./ledger-store");
+  const store = await ensureLedgerStore();
+  const ledger = getWorkflowLedger();
+  await ledger.hydrate(store);
+  ledger.attachStore(store);
+  return ledger;
 }

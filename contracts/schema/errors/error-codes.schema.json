@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "ErrorCode",
-  "description": "infer 自有错误码（errors 域单一事实源，全栈共用；不含基础工程错误族）。范围：注册 / 心跳 / 检视拒绝 / 任务下发 / 完成上报 / IPC / 工作流状态机。client 完成上报携带本域错误码，sidecar 映射为图级节点失败，语义与本地执行对齐（根 DESIGN §9，P0 对拍专测错误路径）。各码语义：E_AUTH_REJECTED=机器凭证无效或未激活（V3）；E_ENDPOINT_ALREADY_REGISTERED=端点重复注册；E_ENDPOINT_UNKNOWN=未注册端点的心跳/上报；E_CAPABILITY_VERSION_MISMATCH=能力声明域版本不匹配（V2 三方比对只看整数相等）；E_INSPECTION_REJECTED=能力检视不满足，拒绝启动工作流；E_TASK_UNKNOWN=完成上报的任务键不存在；E_TASK_ALREADY_REPORTED=requestId 幂等命中，重复上报；E_TASK_REVOKED=端点执行了已撤销任务（标记式懒惰撤销漏检，server 丢弃并记账）；E_OUTPUT_VALIDATION_FAILED=结果格式/数值范围校验失败；E_STORAGE_TRANSFER_FAILED=输入下载/输出上传失败（预签名 URL 过期或传输错误）；E_INFER_FAILED=推理执行失败（端点侧引擎错误，映射图级节点失败）；E_IPC_UNAUTHORIZED=IPC 随机 token 不匹配（D16）；E_IPC_WORKFLOW_UNKNOWN=sidecar 无此 workflowId；E_IPC_INVALID_GRAPH=DCIr 序列化图解析失败（D3）；E_WORKFLOW_NOT_FOUND=工作流不存在；E_WORKFLOW_STATE_CONFLICT=工作流当前状态不允许该操作（自带 id 提交已启动账、非 registered 态上传输入）；E_INTERNAL=未分类内部错误（兜底）。",
+  "description": "infer 自有错误码（errors 域单一事实源，全栈共用；不含基础工程错误族）。范围：注册 / 心跳 / 检视拒绝 / 任务下发 / 完成上报 / IPC / 工作流状态机。client 完成上报携带本域错误码，sidecar 映射为图级节点失败，语义与本地执行对齐（根 DESIGN §9，P0 对拍专测错误路径）。各码语义：E_AUTH_REJECTED=机器凭证无效或未激活（V3）；E_ENDPOINT_ALREADY_REGISTERED=端点重复注册；E_ENDPOINT_UNKNOWN=未注册端点的心跳/上报；E_CAPABILITY_VERSION_MISMATCH=能力声明域版本不匹配（V2 三方比对只看整数相等）；E_INSPECTION_REJECTED=能力检视不满足，拒绝启动工作流；E_TASK_UNKNOWN=完成上报的任务键不存在；E_TASK_ALREADY_REPORTED=requestId 幂等命中，重复上报；E_TASK_REVOKED=端点执行了已撤销任务（标记式懒惰撤销漏检，server 丢弃并记账）；E_OUTPUT_VALIDATION_FAILED=结果格式/数值范围校验失败；E_STORAGE_TRANSFER_FAILED=输入下载/输出上传失败（预签名 URL 过期或传输错误）；E_INFER_FAILED=推理执行失败（端点侧引擎错误，映射图级节点失败）；E_IPC_UNAUTHORIZED=IPC 随机 token 不匹配（D16）；E_IPC_WORKFLOW_UNKNOWN=sidecar 无此 workflowId；E_IPC_INVALID_GRAPH=DCIr 序列化图解析失败（D3）；E_WORKFLOW_NOT_FOUND=工作流不存在；E_WORKFLOW_STATE_CONFLICT=工作流当前状态不允许该操作（自带 id 提交已启动账、非 registered 态上传输入）；E_SHELF_LIFE_EXPIRED=结果保质期已过（终态工作流的结果签名收口，物理清理交 S3 lifecycle）；E_INSUFFICIENT_BALANCE=积分余额不足（提交预检或实扣失败，D12/V13 计量）；E_INTERNAL=未分类内部错误（兜底）。",
   "type": "string",
   "enum": [
     "E_AUTH_REJECTED",
@@ -20,6 +20,8 @@
     "E_IPC_INVALID_GRAPH",
     "E_WORKFLOW_NOT_FOUND",
     "E_WORKFLOW_STATE_CONFLICT",
+    "E_SHELF_LIFE_EXPIRED",
+    "E_INSUFFICIENT_BALANCE",
     "E_INTERNAL"
   ]
 }

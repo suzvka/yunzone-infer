@@ -11,6 +11,7 @@ import { normalizeBusKey } from "@/lib/bus-signer";
 import { requireUserAuth } from "@/lib/control-auth";
 import { getBusSigner } from "@/lib/dispatch-pump";
 import { jsonError } from "@/lib/responses";
+import { isShelfExpired } from "@/lib/shelf-life";
 import { advanceWorkflowStatus } from "@/lib/workflow-status";
 
 export async function GET(
@@ -26,9 +27,17 @@ export async function GET(
     return jsonError("E_WORKFLOW_NOT_FOUND", `workflow "${workflowId}" not found`, 404);
   }
 
-  // completed → finalOutputUri（PUT 形态）取对象键重签 GET（时效内可取，V8）
+  // completed → finalOutputUri（PUT 形态）取对象键重签 GET（时效内可取，V8）；
+  // shelf_life 过期 → 签名收口（410，物理清理交 S3 lifecycle，D8/P2）
   let finalOutputUrl: string | undefined;
   if (record.status === "completed" && record.finalOutputUri !== undefined) {
+    if (isShelfExpired(record)) {
+      return jsonError(
+        "E_SHELF_LIFE_EXPIRED",
+        `workflow "${workflowId}" results expired (shelf life); objects are managed by storage lifecycle`,
+        410
+      );
+    }
     finalOutputUrl = await getBusSigner()(normalizeBusKey(record.finalOutputUri), "GET");
   }
 

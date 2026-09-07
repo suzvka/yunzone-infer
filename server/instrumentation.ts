@@ -15,6 +15,20 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // /db Ledger 持久化（P2 批次 A）：probe + DDL → 内存账恢复 → write-through 挂接；
+  // pg 不可达 fail-fast（配置了 DATABASE_URL 却连不上 = 部署错误）；未配置则内存模式
+  try {
+    const [{ ensureWorkflowLedger }, { ensureTaskAccount }] = await Promise.all([
+      import("./lib/workflow-ledger"),
+      import("./lib/dispatch-pump"),
+    ]);
+    await ensureWorkflowLedger();
+    await ensureTaskAccount();
+  } catch (e) {
+    console.error("[instrumentation] ledger store init failed:", (e as Error).message);
+    throw e;
+  }
+
   const { getSidecarSupervisor } = await import("./lib/sidecar-supervisor");
   const supervisor = getSidecarSupervisor();
   if (!supervisor) return;
@@ -49,7 +63,20 @@ export async function register() {
     void pollSidecarDispatches(supervisor.ipcClient(), {
       signer,
       transport: (endpointId, dispatch) => gateway.pushToEndpoint(endpointId, dispatch),
-      resolveEndpoint: (workflowId) => ledger.get(workflowId)?.endpointId ?? null,
+      // 端点解析（P2 分区）：优先节点级绑定摘要（nodeGroups 多端点），回退工作流默认端点
+      resolveEndpoint: (workflowId, nodeId) => {
+        const record = ledger.get(workflowId);
+        if (!record) return null;
+        if (record.bindingsJson) {
+          try {
+            const map = JSON.parse(record.bindingsJson) as Record<string, string>;
+            if (map[nodeId]) return map[nodeId];
+          } catch {
+            // bindingsJson 损坏 → 回退默认端点（告警一次语义由 write-through 保证，容错）
+          }
+        }
+        return record.endpointId ?? null;
+      },
       canDispatch: (endpointId, modelKey) => {
         if (!gateway.isOnline(endpointId)) return false; // WS 未连接：推送无门
         const entry = registry.listAlive().find((e) => e.endpointId === endpointId);

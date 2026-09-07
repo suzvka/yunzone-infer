@@ -9,9 +9,11 @@
 
 import type { CompletionReport, CompletionReportResponse, NodeCompletionNotice } from "@/lib/contracts";
 import { getBusSigner, getTaskAccount, normalizeBusKey } from "@/lib/dispatch-pump";
+import { settleTaskCompletion } from "@/lib/billing";
 import { requireMachineAuth } from "@/lib/control-auth";
 import { jsonError } from "@/lib/responses";
 import { getIpcSidecarClient } from "@/lib/sidecar-supervisor";
+import { getWorkflowLedger } from "@/lib/workflow-ledger";
 
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireMachineAuth(request);
@@ -71,6 +73,19 @@ export async function POST(request: Request): Promise<Response> {
   } catch (e) {
     return jsonError("E_INTERNAL", `sidecar notify failed: ${(e as Error).message}`, 502);
   }
+
+  // 计量结算（D12/V13，P2 批次 C）：完成即 deduct——内部台账 + /points 实扣；
+  // 不抛错不阻塞回收响应（幂等键在可安全重放；三态降级见 lib/billing）。
+  // 上报成功语义 = markReported 命中 + sidecar 通知成功（失败路径不计费）。
+  await settleTaskCompletion({
+    taskId: report.taskId,
+    workflowId: entry.workflowId,
+    endpointId: report.endpointId,
+    providerAccountId: auth.accountId ?? "unknown",
+    consumerAccountId: getWorkflowLedger().get(entry.workflowId)?.consumerAccountId,
+    modelKey: entry.modelKey,
+    reportedDifficulty: report.difficulty ?? undefined,
+  });
 
   const payload: CompletionReportResponse = { version: 1, ok: true };
   return Response.json(payload);

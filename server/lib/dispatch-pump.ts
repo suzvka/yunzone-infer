@@ -46,11 +46,34 @@ export const DEFAULT_DISPATCH_ENDPOINT_ID = "default-endpoint";
 
 export class TaskAccount {
   private readonly entries = new Map<string, TaskAccountEntry>();
+  private store: import("./ledger-store").LedgerStore | null = null;
+
+  /** 挂接持久化存储位（P2 /db write-through）；启动期 hydrate 后挂接 */
+  attachStore(store: import("./ledger-store").LedgerStore): void {
+    this.store = store;
+  }
+
+  /** 启动恢复：pg 快照填充任务账（不覆盖内存已有条目） */
+  async hydrate(store: import("./ledger-store").LedgerStore): Promise<void> {
+    const { tasks } = await store.loadAll();
+    for (const t of tasks) {
+      if (!this.entries.has(t.taskId)) this.entries.set(t.taskId, t);
+    }
+  }
+
+  private persist(entry: TaskAccountEntry): void {
+    if (!this.store) return;
+    void this.store.putTask(entry).catch((e) =>
+      console.warn(`[task-account] persist ${entry.taskId} failed: ${(e as Error).message}`)
+    );
+  }
 
   /** 记账（taskId 幂等：已存在返回 false，不重复派发；pushed 初始为 false） */
   record(entry: Omit<TaskAccountEntry, "pushed" | "reported">): boolean {
     if (this.entries.has(entry.taskId)) return false;
-    this.entries.set(entry.taskId, { ...entry, pushed: false, reported: false });
+    const full: TaskAccountEntry = { ...entry, pushed: false, reported: false };
+    this.entries.set(entry.taskId, full);
+    this.persist(full);
     return true;
   }
 
@@ -63,13 +86,17 @@ export class TaskAccount {
     const entry = this.entries.get(taskId);
     if (!entry || entry.reported) return false;
     entry.reported = true;
+    this.persist(entry);
     return true;
   }
 
   /** WS 推送成功置位（暂缓任务下轮重推） */
   markPushed(taskId: string): void {
     const entry = this.entries.get(taskId);
-    if (entry) entry.pushed = true;
+    if (entry) {
+      entry.pushed = true;
+      this.persist(entry);
+    }
   }
 
   /** 端点在途任务（已推送未上报；TTL 判死重派消费，批次 E） */
@@ -85,6 +112,35 @@ export class TaskAccount {
       (e) => e.workflowId === workflowId && e.pushed && !e.reported
     );
   }
+
+  /** 全量在途（已推送未上报；重启恢复重推消费，P2 批次 B） */
+  listInFlightForRecovery(): TaskAccountEntry[] {
+    return [...this.entries.values()].filter((e) => e.pushed && !e.reported);
+  }
+
+  /** 重启恢复：在途任务全部置回待推送（返回重置数），泵下轮重推 */
+  resetInFlightForRecovery(): number {
+    let reset = 0;
+    for (const task of this.listInFlightForRecovery()) {
+      task.pushed = false;
+      this.persist(task);
+      reset += 1;
+    }
+    return reset;
+  }
+
+  /** TTL 判死重派换绑（D7：补偿优先级 + pushed 回 false + requestId 重算） */
+  reassign(taskId: string, newEndpointId: string): TaskAccountEntry | null {
+    const task = this.entries.get(taskId);
+    if (!task) return null;
+    task.endpointId = newEndpointId;
+    task.priority = "compensation";
+    task.pushed = false;
+    task.dispatchedAtMs = Date.now();
+    task.requestId = requestIdFor(newEndpointId, taskId);
+    this.persist(task);
+    return task;
+  }
 }
 
 const globalForAccount = globalThis as unknown as {
@@ -94,6 +150,22 @@ const globalForAccount = globalThis as unknown as {
 export function getTaskAccount(): TaskAccount {
   globalForAccount.__inferTaskAccount ??= new TaskAccount();
   return globalForAccount.__inferTaskAccount;
+}
+
+/** 启动期接线（instrumentation register）：共享 store → 恢复 → write-through 挂接。
+ *  恢复的已推送未上报任务置回待推送（上次进程的推送状态不可信——可能已推但上报丢失），
+ *  泵下轮重推（URL 重签；requestId 幂等 + 端点懒惰撤销兜底重复执行风险，D7）。 */
+export async function ensureTaskAccount(): Promise<TaskAccount> {
+  const { ensureLedgerStore } = await import("./ledger-store");
+  const store = await ensureLedgerStore();
+  const account = getTaskAccount();
+  await account.hydrate(store);
+  const reset = account.resetInFlightForRecovery();
+  if (reset > 0) {
+    console.log(`[task-account] recovery: ${reset} in-flight task(s) reset for re-dispatch`);
+  }
+  account.attachStore(store);
+  return account;
 }
 
 // ── requestId 与派发 ────────────────────────────────────────────────────────
@@ -117,7 +189,7 @@ export interface PollDispatchOptions {
     dispatch: TaskDispatch
   ) => boolean | Promise<boolean>;
   /** workflowId → endpointId 绑定解析（P1 绑定账接线；缺省回退单端点默认值） */
-  resolveEndpoint?: (workflowId: string) => string | null;
+  resolveEndpoint?: (workflowId: string, nodeId: string) => string | null;
   /**
    * 反压门控（D9 余量软控制，P1）：false = 暂缓（不调 transport，pushed 保持 false）。
    * instrumentation 装配 = 端点存活（registry）+ WS 在线（gateway）+ modelKey 余量 ≥ 1。
@@ -149,7 +221,7 @@ export async function pollSidecarDispatches(
       const existing = account.get(pending.taskId);
       const endpointId =
         existing?.endpointId ??
-        options.resolveEndpoint?.(pending.workflowId) ??
+        options.resolveEndpoint?.(pending.workflowId, pending.nodeId) ??
         DEFAULT_DISPATCH_ENDPOINT_ID;
       if (existing?.pushed) continue; // 已推送未上报：等完成上报/重派（批次 E），不重推
       if (options.canDispatch && !options.canDispatch(endpointId, pending.modelKey)) {
@@ -224,11 +296,7 @@ export function reassignInFlightTasks(
       );
       continue;
     }
-    task.endpointId = alt.endpointId;
-    task.priority = "compensation";
-    task.pushed = false;
-    task.dispatchedAtMs = Date.now();
-    task.requestId = requestIdFor(alt.endpointId, task.taskId);
+    account.reassign(task.taskId, alt.endpointId);
     reassigned += 1;
     console.log(
       `[dispatch-pump] task ${task.taskId} reassigned: ${deadEndpointId} → ${alt.endpointId} (compensation)`

@@ -16,6 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { StartWorkflowRequest, WorkflowStatus } from "@/lib/contracts";
+import { estimateCost, getPointsClient } from "@/lib/billing";
 import { requireUserAuth } from "@/lib/control-auth";
 import { getEndpointRegistry } from "@/lib/endpoint-registry";
 import { inspectWorkflowGraph, type InspectableModel } from "@/lib/inspection";
@@ -55,6 +56,12 @@ const submitSchema = z.object({
       })
     )
     .default([]),
+  /** 静态手动分区（D9/P2 批次 D）：同组节点强制绑定同一端点（互斥/环语义的消费者
+   *  载体）；未分组节点各自独立绑定。环内远程节点同组约束由绑定器校验，违反 → 422。
+   *  任一组无可服务端点 → 直接拒绝（不等待不做拉模型兜底，2026-09-08 拍板） */
+  nodeGroups: z
+    .array(z.array(z.string().min(1)).min(1))
+    .default([]),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -71,7 +78,29 @@ export async function POST(request: Request): Promise<Response> {
   if (!parsed.success) {
     return jsonError("E_INTERNAL", `malformed submit request: ${parsed.error.message}`);
   }
-  const { graph, remoteNodes, localInputs, workflowId: clientWorkflowId } = parsed.data;
+  const { graph, remoteNodes, localInputs, nodeGroups, workflowId: clientWorkflowId } = parsed.data;
+
+  // 计量预检（D12/V13，P2 批次 C）：/points 配置时查余额，不足直接拒绝（不可计费
+  // 模型不计入预估，免费语义）；未配置三态跳过（lib/billing 内告警）
+  const points = getPointsClient();
+  if (points && auth.accountId) {
+    const estimate = estimateCost(remoteNodes.map((n) => n.modelKey));
+    if (estimate > 0) {
+      try {
+        const { balance } = await points.balance({ accountId: auth.accountId });
+        if (balance < estimate) {
+          return jsonError(
+            "E_INSUFFICIENT_BALANCE",
+            `balance ${balance} < estimate ${estimate} (accountId: ${auth.accountId})`,
+            422
+          );
+        }
+      } catch (e) {
+        // 预检不可达：不阻塞提交（扣费侧 requestId 幂等兜底），告警放行
+        console.warn(`[infer] balance precheck failed: ${(e as Error).message}`);
+      }
+    }
+  }
 
   // 两步流：id 由消费者自带（键规则含 id，输入预置须先行）；一步流服务端生成
   const ledger = getWorkflowLedger();
@@ -85,7 +114,14 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   if (!existing) {
-    ledger.upsert({ workflowId, status: "registered" });
+    ledger.upsert({
+      workflowId,
+      status: "registered",
+      ...(auth.accountId ? { consumerAccountId: auth.accountId } : {}),
+    });
+  } else if (existing.status === "registered" && !existing.consumerAccountId && auth.accountId) {
+    // 两步流开账由上传签名完成（机器面无消费者上下文）——提交时补记扣款锚点
+    ledger.transition(workflowId, "registered", { consumerAccountId: auth.accountId });
   }
 
   // 绑定（D9 MVP：整图单端点；含 IO 复核与余量前置）+ 全量检视（两层防线静态半边）
@@ -93,6 +129,7 @@ export async function POST(request: Request): Promise<Response> {
     workflowId,
     graph,
     intents: remoteNodes,
+    nodeGroups,
     endpoints: getEndpointRegistry().listAlive(),
   });
   const allModels: InspectableModel[] = getEndpointRegistry()
@@ -147,6 +184,10 @@ export async function POST(request: Request): Promise<Response> {
 
   ledger.transition(workflowId, "dispatching", {
     ...(bind.endpointId ? { endpointId: bind.endpointId } : {}),
+    // 分区绑定摘要（nodeId → endpointId）：泵按节点解析端点（P2 批次 D）
+    ...(Object.keys(bind.nodeEndpoint).length > 0
+      ? { bindingsJson: JSON.stringify(bind.nodeEndpoint) }
+      : {}),
   });
   console.log(
     `[infer] workflow started: ${workflowId} → endpoint ${bind.endpointId || "(local-only)"} ` +

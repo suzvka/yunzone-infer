@@ -9,6 +9,7 @@ import type { NodeOutputUrlResponse } from "@/lib/contracts";
 import { requireUserAuth } from "@/lib/control-auth";
 import { getBusSigner } from "@/lib/dispatch-pump";
 import { jsonError } from "@/lib/responses";
+import { isShelfExpired } from "@/lib/shelf-life";
 import { planObjectKeys } from "@/lib/scheduler";
 import { getWorkflowLedger } from "@/lib/workflow-ledger";
 
@@ -29,6 +30,13 @@ export async function GET(
   const record = getWorkflowLedger().get(workflowId);
   if (!record) {
     return jsonError("E_WORKFLOW_NOT_FOUND", `workflow "${workflowId}" not found`, 404);
+  }
+  if (isShelfExpired(record)) {
+    return jsonError(
+      "E_SHELF_LIFE_EXPIRED",
+      `workflow "${workflowId}" results expired (shelf life)`,
+      410
+    );
   }
 
   const outputUrl = await getBusSigner()(planObjectKeys(workflowId).remoteOutputKey(node), "GET");

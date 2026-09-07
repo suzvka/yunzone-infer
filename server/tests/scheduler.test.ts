@@ -135,9 +135,110 @@ describe("bindWorkflow（D9 MVP 整图单端点）", () => {
       intents: [],
       endpoints: [],
     });
-    expect(result).toEqual({ ok: true, endpointId: "", bindings: [] });
+    expect(result).toEqual({ ok: true, endpointId: "", bindings: [], nodeEndpoint: {} });
   });
 });
+
+describe("bindWorkflow（P2 静态手动分区 + 环校验，批次 D）", () => {
+  const addModelIo = {
+    inputs: [
+      { name: "a", tensorType: "Float", typeSize: 4, shape: [], required: true },
+      { name: "b", tensorType: "Float", typeSize: 4, shape: [], required: true },
+    ],
+    outputs: [{ name: "sum", tensorType: "Float", typeSize: 4, shape: [], required: true }],
+  };
+  const BOTH_INTENTS = [
+    { nodeId: "model_node", modelKey: "models/p0-stub" },
+    { nodeId: "add_node", modelKey: "models/add" },
+  ];
+  const bothEndpoints = [
+    entry("ep-stub", [{ modelKey: "models/p0-stub", queueRemaining: 4, io: stubModelIo }]),
+    entry("ep-add", [{ modelKey: "models/add", queueRemaining: 4, io: addModelIo }]),
+  ];
+
+  it("nodeGroups 跨端点分区：各组独立绑定，nodeEndpoint 逐节点解析", () => {
+    const result = bindWorkflow({
+      workflowId: "wf-p2-1",
+      graph: parityGraph(),
+      intents: BOTH_INTENTS,
+      nodeGroups: [["model_node"], ["add_node"]],
+      endpoints: bothEndpoints,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.nodeEndpoint).toEqual({ model_node: "ep-stub", add_node: "ep-add" });
+      expect(result.bindings).toHaveLength(2);
+    }
+  });
+
+  it("同组强制同端点：单端点不可同时服务两模型 → 拒绝", () => {
+    const result = bindWorkflow({
+      workflowId: "wf-p2-2",
+      graph: parityGraph(),
+      intents: BOTH_INTENTS,
+      nodeGroups: [["model_node", "add_node"]],
+      endpoints: bothEndpoints, // 无端点同时持有两模型
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("model_node");
+  });
+
+  it("未分组节点自由绑定：缺端点模型组失败不影响其他组?→ 整体拒绝（原子绑定）", () => {
+    // 组 A 可服务，组 B 无端点 → 整体拒绝（部分绑定的悬挂比拒绝更危险，拍板语义）
+    const result = bindWorkflow({
+      workflowId: "wf-p2-3",
+      graph: parityGraph(),
+      intents: BOTH_INTENTS,
+      nodeGroups: [["model_node"], ["add_node"]],
+      endpoints: [entry("ep-stub", [{ modelKey: "models/p0-stub", queueRemaining: 4, io: stubModelIo }])],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain("add_node");
+  });
+
+  it("环校验：环内远程节点跨组 → 拒绝；同组 → 通过", () => {
+    // 环图：r1 ↔ r2（反馈回路）
+    const cycleGraph = {
+      version: "1.0",
+      nodes: [
+        { name: "r1", type: "models/p0-stub", affinity: "Operator", inputs: [floatPortOf("x")], outputs: [floatPortOf("y")] },
+        { name: "r2", type: "models/p0-stub", affinity: "Operator", inputs: [floatPortOf("x")], outputs: [floatPortOf("y")] },
+      ],
+      edges: [
+        { srcNode: "r1", srcPort: "y", dstNode: "r2", dstPort: "x" },
+        { srcNode: "r2", srcPort: "y", dstNode: "r1", dstPort: "x" },
+      ],
+      inputBindings: [],
+      outputBindings: [],
+    };
+    const intents = [
+      { nodeId: "r1", modelKey: "models/p0-stub" },
+      { nodeId: "r2", modelKey: "models/p0-stub" },
+    ];
+    const endpoints = [entry("ep-1", [{ modelKey: "models/p0-stub", queueRemaining: 8, io: stubModelIo }])];
+    const cross = bindWorkflow({
+      workflowId: "wf-p2-4",
+      graph: cycleGraph,
+      intents,
+      nodeGroups: [["r1"], ["r2"]],
+      endpoints,
+    });
+    expect(cross.ok).toBe(false);
+    if (!cross.ok) expect(cross.reason).toContain("环");
+    const same = bindWorkflow({
+      workflowId: "wf-p2-5",
+      graph: cycleGraph,
+      intents,
+      nodeGroups: [["r1", "r2"]],
+      endpoints,
+    });
+    expect(same.ok).toBe(true);
+  });
+});
+
+function floatPortOf(name: string) {
+  return { name, tensorType: "Float", typeSize: 4, shape: [], required: true };
+}
 
 describe("planObjectKeys（对象键规则）", () => {
   it("工作流级前缀：inputs / nodes output / final", () => {

@@ -64,15 +64,21 @@ TS/Next 控制面（生态集成 + 调度编排）+ C++ DCinfer 执行面（图�
 
 自动最优分区后置（图割 / 装箱难题，非 MVP 目标）。**调度层约束**（承接根 §11）：有互斥关系的节点、环 / 反馈回路**必须绑定同一客户端**（跨机拆分塌语义与性能）。
 
+**P2 落地注记（2026-09-08）**：静态手动分区落地——提交请求 `nodeGroups: [{nodes}]` 分组约束声明（同组强制同端点，DCIr 无互斥声明，消费者分组即互斥载体）；**环校验前置**（控制面静态读图 Tarjan SCC，环内远程节点跨组 → 422）；逐组贪心绑定 + nodeEndpoint 摘要（write-through 持久化）+ 泵按节点解析端点。**拍板**：调度面只对端点（非终端），任一组无可服务端点 → 直接 422 拒绝，**不等待、不做拉模型兜底**（缺端点自动拉模型注册后置）。sidecar 零改动（总线共享键空间天然支持跨端点）。
+
 **任务注入与反压（2026-09-07 capability 访谈定案）**：调度器对端点采用**过量注入**——任务持续下发至端点 per-model 队列（qingge-api TaskPool 模式），队列恒非空保持满负荷，网络延迟气泡被队列吸收。**反压 = 余量软控制**：端点余量（任务数）随心跳/完成上报，注入前查余量，满则暂缓推送。**失败重派任务带补偿优先级**（已排过队，失败是端点的问题——升入端点优先子队列）。调度打分（P3）消费端点运行时指标（分段耗时聚合）。
 
 ### D7 — 结果回收寻址：(客户端, 任务) 二元组 + /db Ledger
 
 `(客户端, 任务)` 二元组为基本键；控制面 `/db` 持 Ledger；张量结果经**对象存储总线**承载（完成上报携带输出 URI，执行面拉取唤醒，D8 事件驱动，V8）。回收语义见根 DESIGN。client 上报侧见 [client/DESIGN.md](../client/DESIGN.md)。**任务在途账本**：端点 TTL 判死后，其在途任务**重新入池重派**（重签预签名 URL，requestId 幂等先到先得）；任务撤销 = 标记式（下发「不再执行」，端点出队前检查跳过），无任务级超时。
 
+**P2 落地注记（2026-09-08）**：/db 持久化落地——工作流账/任务账 = **内存权威 + pg write-through + 启动恢复**（状态可重建，调用点同步语义零改动；恢复的在途任务重置待推送，requestId/懒惰撤销兜底重复风险）；reward 台账 = **pg 权威**（资金面可靠落库，UNIQUE(client_id,task_id) 幂等）。渠道：DATABASE_URL 配置 → kit /db postgres（probe + DDL，失败 fail-fast）；未配置 → 内存 + 一次性告警（与 /auth 三态同构）。**shelf_life（签名收口）**：终态结果可取回期限（默认 24h，INFERENCE_SHELF_LIFE_MS），超期结果端点 410 E_SHELF_LIFE_EXPIRED；物理清理交 S3 lifecycle（控制面不建删表面，D20）。
+
 ### D12 — 生态计费：/points 双向流 + 模型报价
 
 deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧）。**模型报价（2026-09-07 定案，V13 配套）**：每模型带「输入张量 → 难度系数」钩子（内容级，模型开发者定义，client 执行时计算并随完成上报）+ 模型单价，计费 = 难度 × 单价；Ledger 预留 meter 字段。可信度信任市场竞争 + 直营模型精算，不建抽样审计（V13）。`requestId` 幂等天然对齐 `(客户端,任务)` 去重。deposit 走 infer 内部台账汇总后存入（非每任务直接发放），详见 [deposit-model.md](../docs/deposit-model.md)。**门禁**：验证强度达「抽样审计+声誉」前不启用真实 deposit 兑付（[security-compute-providers.md](../docs/security-compute-providers.md)）。
+
+**P2 落地注记（2026-09-08，拍板：完成即 deduct）**：完成上报成功 → 计费 =（上报难度 ?? INFER_MODEL_CATALOG 静态难度）× 单价 → ① reward 台账落库（/db pg 权威）② kit /points deduct（消费者 accountId，requestId=`deduct:{taskId}` 幂等，失败不阻塞回收、可安全重放）。**单价控制面持有**（INFER_MODEL_CATALOG），不由端点自报（不信任域）；提交时余额预检（不足 422 E_INSUFFICIENT_BALANCE）。三态：POINTS_BASE_URL 未配置 → 仅台账不实扣 + 告警。deposit 兑付按门禁后置（内部台账 P2 已就位）。
 
 ### D19 — UI 三场景 + 信任约束
 

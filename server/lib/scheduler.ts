@@ -37,6 +37,13 @@ export interface BindingInput {
   workflowId: string;
   graph: unknown;
   intents: readonly RemoteNodeIntent[];
+  /**
+   * 静态手动分区（D9/P2 批次 D）：分组约束声明——同组节点强制绑定同一端点
+   * （互斥/环语义的消费者载体）；未出现在任何组里的意图节点 = 自由节点（独立
+   * 贪心绑定）。**环校验**：图内环 SCC 中的远程节点必须同组（跨机环塌语义与
+   * 性能，根 §11），违反 → 绑定拒绝。
+   */
+  nodeGroups?: readonly string[][];
   /** registry.listAlive() 能力视图（绑定即消费，防检视后漂移） */
   endpoints: readonly EndpointEntry[];
 }
@@ -62,9 +69,12 @@ export function planObjectKeys(workflowId: string): WorkflowObjectKeys {
 export type BindingResult =
   | {
       ok: true;
+      /** 首组绑定端点（兼容 WorkflowRecord.endpointId 单值语义；分区后为展示摘要） */
       endpointId: string;
       /** RemoteNodeBinding（uri 为对象键语义，派发时签 URL） */
       bindings: RemoteNodeBinding[];
+      /** nodeId → endpointId（P2 分区绑定摘要；泵按节点解析端点） */
+      nodeEndpoint: Record<string, string>;
     }
   | { ok: false; reason: string };
 
@@ -95,16 +105,122 @@ function endpointServes(
 }
 
 /**
- * 绑定入口：意图 × 能力视图 → 单端点绑定计划（含对象键规划）。
+ * 环校验（静态读图，控制面不 link DCinfer）：edges 邻接 → SCC（Tarjan 迭代版）→
+ * size > 1 或自环的分量 = 环；环内远程节点必须落在同一声明组（无声明 → 全部
+ * 同组才合法）。返回违规描述，null = 通过。
+ */
+export function cycleViolation(graph: unknown, nodeGroups?: readonly string[][]): string | null {
+  const nodesRaw = typeof graph === "object" && graph !== null ? (graph as { nodes?: unknown }).nodes : undefined;
+  const edgesRaw = typeof graph === "object" && graph !== null ? (graph as { edges?: unknown }).edges : undefined;
+  if (!Array.isArray(nodesRaw) || !Array.isArray(edgesRaw)) return null;
+
+  const nameOf = (v: unknown): string | null => {
+    const n = asNodeEntry(v);
+    return n ? n.name : null;
+  };
+  const all = new Set<string>();
+  for (const n of nodesRaw) {
+    const name = nameOf(n);
+    if (name) all.add(name);
+  }
+  const adj = new Map<string, Set<string>>();
+  for (const name of all) adj.set(name, new Set());
+  const remote = new Set<string>();
+  if (nodeGroups) for (const g of nodeGroups) for (const n of g) remote.add(n);
+
+  for (const e of edgesRaw) {
+    const edge = e as { srcNode?: unknown; dstNode?: unknown };
+    if (typeof edge.srcNode !== "string" || typeof edge.dstNode !== "string") continue;
+    if (!all.has(edge.srcNode) || !all.has(edge.dstNode)) continue;
+    adj.get(edge.srcNode)?.add(edge.dstNode); // 自环天然表达（src == dst）
+  }
+
+  // Tarjan SCC（迭代版，防深图栈溢出）
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  let counter = 0;
+  const sccs: string[][] = [];
+  for (const root of all) {
+    if (index.has(root)) continue;
+    const call: Array<{ node: string; iter: Iterator<string> }> = [{ node: root, iter: adj.get(root)![Symbol.iterator]() }];
+    index.set(root, counter);
+    low.set(root, counter);
+    counter += 1;
+    stack.push(root);
+    onStack.add(root);
+    while (call.length > 0) {
+      const frame = call[call.length - 1];
+      const next = frame.iter.next();
+      if (next.done) {
+        call.pop();
+        if (call.length > 0) {
+          const parent = call[call.length - 1].node;
+          low.set(parent, Math.min(low.get(parent)!, low.get(frame.node)!));
+        }
+        if (low.get(frame.node) === index.get(frame.node)) {
+          const component: string[] = [];
+          for (;;) {
+            const w = stack.pop()!;
+            onStack.delete(w);
+            component.push(w);
+            if (w === frame.node) break;
+          }
+          sccs.push(component);
+        }
+        continue;
+      }
+      const w = next.value;
+      if (!index.has(w)) {
+        index.set(w, counter);
+        low.set(w, counter);
+        counter += 1;
+        stack.push(w);
+        onStack.add(w);
+        call.push({ node: w, iter: adj.get(w)![Symbol.iterator]() });
+      } else if (onStack.has(w)) {
+        low.set(frame.node, Math.min(low.get(frame.node)!, index.get(w)!));
+      }
+    }
+  }
+
+  for (const component of sccs) {
+    const isCycle = component.length > 1 || (adj.get(component[0])?.has(component[0]) ?? false);
+    if (!isCycle) continue;
+    const cycleRemote = component.filter((n) => remote.has(n));
+    if (cycleRemote.length === 0) continue; // 纯本地环（sidecar 内），无分区面
+    const groupsOf = cycleRemote.map(
+      (n) => nodeGroups?.findIndex((g) => g.includes(n)) ?? -1
+    );
+    const distinct = new Set(groupsOf);
+    if (distinct.size > 1) {
+      return `环 [${component.join(" → ")}] 内远程节点必须绑定同一端点（nodeGroups 同组约束，D9）`;
+    }
+  }
+  return null;
+}
+/**
+ * 绑定入口：意图 × 能力视图 → 绑定计划（含对象键规划）。
  * 空 intents（纯本地图）→ 绑定 formality 端点 null 语义由入口处理（无端点参与）。
+ *
+ * P2 静态手动分区：nodeGroups 同组节点强制同端点（逐组贪心，组间端点可复用——
+ * 分组语义是「必须同端点」约束而非「必须不同端点」）；未分组节点各自独立贪心。
+ * **环校验前置**：环内远程节点同组约束（cycleViolation）。
+ * **拍板（2026-09-08）**：任一组/节点无可服务端点 → 直接拒绝，不等待、不做拉模型兜底
+ * （调度面只对端点；缺端点自动化后置）。
  */
 export function bindWorkflow(input: BindingInput): BindingResult {
   const { graph, intents, endpoints } = input;
 
   // 空 intents（纯本地图）：无端点参与，endpointId 返回空串由入口处理
   if (intents.length === 0) {
-    return { ok: true, endpointId: "", bindings: [] };
+    return { ok: true, endpointId: "", bindings: [], nodeEndpoint: {} };
   }
+
+  // 环校验前置（静态约束，先于端点能力检查）
+  const cycle = cycleViolation(graph, input.nodeGroups);
+  if (cycle) return { ok: false, reason: cycle };
 
   // 图形态窄读取（与 inspection 同构：nodes[].name + inputs/outputs 端口数组）
   const nodesRaw = (typeof graph === "object" && graph !== null ? (graph as { nodes?: unknown }).nodes : undefined);
@@ -116,6 +232,20 @@ export function bindWorkflow(input: BindingInput): BindingResult {
     }
   }
 
+  // 分区组装配：声明组 ∪ 自由节点（未分组的意图节点各自成组，独立绑定）
+  const intentById = new Map(intents.map((i) => [i.nodeId, i]));
+  const grouped = new Set<string>();
+  const partitions: RemoteNodeIntent[][] = [];
+  for (const group of input.nodeGroups ?? []) {
+    const members = group.map((n) => intentById.get(n)).filter((i): i is RemoteNodeIntent => i !== undefined);
+    if (members.length === 0) continue; // 声明组无对应意图节点（本地/未知节点）→ 不产生绑定约束
+    for (const m of members) grouped.add(m.nodeId);
+    partitions.push(members);
+  }
+  for (const intent of intents) {
+    if (!grouped.has(intent.nodeId)) partitions.push([intent]); // 自由节点独立绑定
+  }
+
   // 多端点可服务 → queueTotalRemaining 最大（MVP 贪心；打分调度 P3）
   const candidates = [...endpoints].sort(
     (a, b) =>
@@ -123,29 +253,36 @@ export function bindWorkflow(input: BindingInput): BindingResult {
       a.capability.models.reduce((s, m) => s + m.queueRemaining, 0)
   );
 
-  const reasons: string[] = [];
-  for (const entry of candidates) {
-    const reason = endpointServes(entry, intents, nodeIndex);
-    if (reason === null) {
-      const keys = planObjectKeys(input.workflowId);
-      const bindings: RemoteNodeBinding[] = intents.map((intent) => ({
-        nodeId: intent.nodeId,
-        modelKey: intent.modelKey,
-        outputUri: keys.remoteOutputKey(intent.nodeId),
-        inputs: remoteInputBindings(graph, intent.nodeId, keys),
-      }));
-      return { ok: true, endpointId: entry.endpointId, bindings };
+  const keys = planObjectKeys(input.workflowId);
+  const nodeEndpoint: Record<string, string> = {};
+  for (const members of partitions) {
+    const reasons: string[] = [];
+    let picked: EndpointEntry | null = null;
+    for (const entry of candidates) {
+      const reason = endpointServes(entry, members, nodeIndex);
+      if (reason === null) {
+        picked = entry;
+        break;
+      }
+      reasons.push(reason);
     }
-    reasons.push(reason);
+    if (!picked) {
+      return {
+        ok: false,
+        reason: `节点 [${members.map((m) => m.nodeId).join(", ")}] 无存活端点可服务：${[...new Set(reasons)].join("；")}`,
+      };
+    }
+    for (const m of members) nodeEndpoint[m.nodeId] = picked.endpointId;
   }
 
-  return {
-    ok: false,
-    reason:
-      reasons.length > 0
-        ? reasons.join("; ")
-        : "无存活端点可服务全部远程节点（整图单端点绑定，D9 MVP）",
-  };
+  const bindings: RemoteNodeBinding[] = intents.map((intent) => ({
+    nodeId: intent.nodeId,
+    modelKey: intent.modelKey,
+    outputUri: keys.remoteOutputKey(intent.nodeId),
+    inputs: remoteInputBindings(graph, intent.nodeId, keys),
+  }));
+  const endpointId = nodeEndpoint[intents[0]!.nodeId] ?? "";
+  return { ok: true, endpointId, bindings, nodeEndpoint };
 }
 
 /** 远程节点输入端口枚举 → 对象键绑定（端口名来自图节点 inputs 声明顺序） */

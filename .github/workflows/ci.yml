@@ -1,0 +1,100 @@
+# yunzone-infer 双轨 CI（DESIGN §10 / D17 / V4：P0 仅 windows-latest + ubuntu-latest）
+#
+# 轨 1（ts）   ：pnpm install → codegen → ts-check → build → test（两 OS）
+# 轨 2（cmake-dcinfer）：external/DCinfer 以**顶层工程**身份 build + ctest —— D17 头号未知
+#   （DCinfer/DCIr 双平台可移植性）的持续实证载体。
+# 轨 3（cmake-sidecar）：消费语境（add_subdirectory 引 DCinfer）build + 冒烟运行。
+#
+# vcpkg：临时 clone 最新 master（骨架期不做缓存，依赖仅 nlohmann-json/zlib/minizip，构建轻）。
+# client（onnxruntime/poco）暂不进 CI：待 P0 spike 收紧 BUILD_ENGINES 后随 P1 接入。
+
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  ts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm codegen
+      - run: pnpm -r ts-check
+      - run: pnpm -r build
+      - run: pnpm -r test
+
+  cmake-dcinfer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Clone vcpkg
+        run: git clone --depth 1 https://github.com/microsoft/vcpkg.git "${{ runner.temp }}/vcpkg"
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: '"%RUNNER_TEMP%\vcpkg\bootstrap-vcpkg.bat" -disableMetrics'
+      - name: Bootstrap vcpkg (Linux)
+        if: runner.os == 'Linux'
+        run: "${{ runner.temp }}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Configure（顶层语境；示例不构建，测试全开）
+        run: >
+          cmake -S external/DCinfer -B build/dcinfer
+          -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+          -DBUILD_EXAMPLES=OFF
+      - name: Build
+        run: cmake --build build/dcinfer --config Release
+      - name: ctest（DCinfer 核心 + DCIr 全套 —— D17 run 级证据）
+        run: ctest --test-dir build/dcinfer -C Release --output-on-failure
+
+  cmake-sidecar:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Clone vcpkg
+        run: git clone --depth 1 https://github.com/microsoft/vcpkg.git "${{ runner.temp }}/vcpkg"
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: '"%RUNNER_TEMP%\vcpkg\bootstrap-vcpkg.bat" -disableMetrics'
+      - name: Bootstrap vcpkg (Linux)
+        if: runner.os == 'Linux'
+        run: "${{ runner.temp }}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Configure（消费语境；sidecar 自带 manifest，DCinfer 自带测试纳入 ctest 回归，上游 27e9c7d 修复后消费语境可用）
+        run: >
+          cmake -S server/sidecar -B build/sidecar
+          -DCMAKE_TOOLCHAIN_FILE=${{ runner.temp }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+      - name: Build
+        run: cmake --build build/sidecar --config Release
+      - name: ctest（消费语境回归：DCinfer 核心 + DCIr，11 项）
+        run: ctest --test-dir build/sidecar -C Release --output-on-failure
+      - name: 冒烟运行（Windows）
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: build\sidecar\Release\infer-sidecar.exe
+      - name: 冒烟运行（Linux）
+        if: runner.os == 'Linux'
+        run: ./build/sidecar/infer-sidecar

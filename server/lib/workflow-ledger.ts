@@ -23,8 +23,6 @@ export interface WorkflowRecord {
   finalOutputUri?: string;
   /** 绑定端点（D9 MVP 整图单端点；空串/缺省 = 纯本地图无端点参与；分区后为首组端点） */
   endpointId?: string;
-  /** 消费者平台账户（/auth introspect，P2 计费扣款锚点） */
-  consumerAccountId?: string;
   /** 静态分区绑定摘要（P2 批次 D：nodeId → endpointId JSON，泵按节点解析端点） */
   bindingsJson?: string;
   /** 建账时刻（shelf_life 期限基准之一；write-through 恢复用） */

@@ -24,7 +24,6 @@ export function getOpsReporter() {
       "HOST",
       "AUTH_CENTER_BASE_URL",
       "ADMIN_PASSWORD",
-      "UC_BASE_URL",
       "DATABASE_URL",
       "SIDECAR_PORT",
     ]);

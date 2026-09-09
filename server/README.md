@@ -10,15 +10,17 @@
 - **能力检视**：读 DCIr 图需求 × 已登记能力匹配，不满足则拒绝启动
 - **调度器**：图分区 → 任务到客户端绑定（策略可替换接口）
 - **工作流状态机**：登记 → 检视 → 绑定 → 派发 → 回收 → 聚合（`/db` Ledger 持久化）
-- **管理控制台 + 生态集成**：`/ops` · `/auth` · `/points` · `/storage` · `/config` · `/app`
+- **管理控制台 + 生态集成**：`/ops` · `/auth` · `/storage` · `/config` · `/app`（`/points` 计量已退场，见 [DESIGN.md](./DESIGN.md) D12）
 
 ## 3 受众 UI（D19）
 
 | 受众 | 场景 | 鉴权 |
 |---|---|---|
-| 推理消费者 | 提交推理请求 / 看自己历史任务 | `/auth` introspect（+ `/points` deduct 计量） |
+| 推理消费者 | 提交推理请求 / 看自己历史任务 | `/auth` introspect |
 | 管理员 | 看整个算力网络运行状况 | `/ops/next` `requireAdminAuth`（session cookie） |
-| 算力提供者 | 看收益台账 + 点「存入账户」(deposit) | end-user `/auth`（**信任域，禁落 client**，D19；见 docs/deposit-model.md） |
+| 算力提供者 | 看本端点贡献与存活状态 | end-user `/auth`（**信任域，禁落 client**，D19） |
+
+> 收益台账与发放类 UI 已随积分逻辑退场（D12，2026-09-09）；计量域接入后仍须留在信任域（D19）。
 
 ## 执行面 sidecar（`sidecar/`，P0 已落地最小实现）
 

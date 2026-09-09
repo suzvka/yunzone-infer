@@ -8,7 +8,7 @@
 //   完成上报：输出 URI + 形状/类型元数据 + 错误码 + 分段耗时（D8 事件驱动）
 //
 // 纯 C++，不消费 service-kit（D10）；无 DCNet / 无监听端（V9）；
-// 属不信任域，禁自助触发 deposit（D19）。
+// 属不信任域，禁自助发放报酬（D19；计量面已上移平台，2026-09-09）。
 //
 // 用法：infer-clientd --config <daemon.json>（示例见 ../config.example.json）
 

@@ -16,7 +16,7 @@ server/                       # 自托管 Next.js standalone（node runtime，D1
 │   ├── 调度器         图分区 → 任务到客户端绑定（策略可替换接口，D9）
 │   ├── 工作流状态机   登记→检视→绑定→派发→回收→聚合 的编排与状态持久化（/db Ledger，§5）
 │   ├── 管理控制台     /ops + /ops/next requireAdminAuth；getStatus 快照投影"检视全部节点"（D5）
-│   ├── 生态集成       /auth 鉴权 · /points 计量 · /storage 模型产物 · /config env facets · /app 目录（D12/D20）
+│   ├── 生态集成       /auth 鉴权 · /storage 模型产物 · /config env facets · /app 目录（D20；/points 计量已退场，D12）
 │   └── 控制通道端点   REST（注册 / 心跳 / 完成上报 / 状态）+ WS 推送（任务下发，V5）；心跳全量携带能力声明（V6）
 │
 └── 执行面（C++ sidecar 子进程，link DCinfer，D2）
@@ -72,17 +72,33 @@ TS/Next 控制面（生态集成 + 调度编排）+ C++ DCinfer 执行面（图�
 
 `(客户端, 任务)` 二元组为基本键；控制面 `/db` 持 Ledger；张量结果经**对象存储总线**承载（完成上报携带输出 URI，执行面拉取唤醒，D8 事件驱动，V8）。回收语义见根 DESIGN。client 上报侧见 [client/DESIGN.md](../client/DESIGN.md)。**任务在途账本**：端点 TTL 判死后，其在途任务**重新入池重派**（重签预签名 URL，requestId 幂等先到先得）；任务撤销 = 标记式（下发「不再执行」，端点出队前检查跳过），无任务级超时。
 
-**P2 落地注记（2026-09-08）**：/db 持久化落地——工作流账/任务账 = **内存权威 + pg write-through + 启动恢复**（状态可重建，调用点同步语义零改动；恢复的在途任务重置待推送，requestId/懒惰撤销兜底重复风险）；reward 台账 = **pg 权威**（资金面可靠落库，UNIQUE(client_id,task_id) 幂等）。渠道：DATABASE_URL 配置 → kit /db postgres（probe + DDL，失败 fail-fast）；未配置 → 内存 + 一次性告警（与 /auth 三态同构）。**shelf_life（签名收口）**：终态结果可取回期限（默认 24h，INFERENCE_SHELF_LIFE_MS），超期结果端点 410 E_SHELF_LIFE_EXPIRED；物理清理交 S3 lifecycle（控制面不建删表面，D20）。
+**P2 落地注记（2026-09-08）**：/db 持久化落地——工作流账/任务账 = **内存权威 + pg write-through + 启动恢复**（状态可重建，调用点同步语义零改动；恢复的在途任务重置待推送，requestId/懒惰撤销兜底重复风险）。渠道：DATABASE_URL 配置 → kit /db postgres（probe + DDL，失败 fail-fast）；未配置 → 内存 + 一次性告警（与 /auth 三态同构）。**shelf_life（签名收口）**：终态结果可取回期限（默认 24h，INFERENCE_SHELF_LIFE_MS），超期结果端点 410 E_SHELF_LIFE_EXPIRED；物理清理交 S3 lifecycle（控制面不建删表面，D20）。
 
-### D12 — 生态计费：/points 双向流 + 模型报价
+### D12 — 生态计费（2026-09-09 定案：不在本仓，上移平台计量域）
 
-deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧）。**模型报价（2026-09-07 定案，V13 配套）**：每模型带「输入张量 → 难度系数」钩子（内容级，模型开发者定义，client 执行时计算并随完成上报）+ 模型单价，计费 = 难度 × 单价；Ledger 预留 meter 字段。可信度信任市场竞争 + 直营模型精算，不建抽样审计（V13）。`requestId` 幂等天然对齐 `(客户端,任务)` 去重。deposit 走 infer 内部台账汇总后存入（非每任务直接发放），详见 [deposit-model.md](../docs/deposit-model.md)。**门禁**：验证强度达「抽样审计+声誉」前不启用真实 deposit 兑付（[security-compute-providers.md](../docs/security-compute-providers.md)）。
+**现行结论**：infer 不再持有积分概念。原 `/points` 双向流（消费侧 deduct + 产出侧 deposit）、
+模型报价（单价 × 静态难度）、reward 台账、提交时余额预检、`INFER_MODEL_CATALOG` /
+`POINTS_BASE_URL` / `UC_BASE_URL` 配面已**整体删除**（代码与存表 DDL 同步退场，pg 存量表不 DROP）。
 
-**P2 落地注记（2026-09-08，拍板：完成即 deduct）**：完成上报成功 → 计费 =（上报难度 ?? INFER_MODEL_CATALOG 静态难度）× 单价 → ① reward 台账落库（/db pg 权威）② kit /points deduct（消费者 accountId，requestId=`deduct:{taskId}` 幂等，失败不阻塞回收、可安全重放）。**单价控制面持有**（INFER_MODEL_CATALOG），不由端点自报（不信任域）；提交时余额预检（不足 422 E_INSUFFICIENT_BALANCE）。三态：POINTS_BASE_URL 未配置 → 仅台账不实扣 + 告警。deposit 兑付按门禁后置（内部台账 P2 已就位）。
+为什么不在这里：
+1. 平台的口径是先按价采购算力、再转售给用户——**定价与账目属平台义务**，控制面持有它
+   等于把平台资产沉到一个执行调度产品里；
+2. 扣款参考用的是 `publicClaims.accountId`，**由签发产品自报、鉴权中心不校验**——伪造面
+   对所有产品开放，风控只是在错误的主轴上补丁；
+3. 报价方向也反了：难度系数由端点（利益相关方）自报，而平台需要的是**可审计的客观用量**。
+
+保留的资产（接入计量域时直接可用）：
+- `CompletionReport.metrics` / `difficulty` 上报字段（contracts 本轮不动，接入时重定义语义）；
+- `requestId` 幂等根与 `(client_id, task_id)` 去重——天然对接账本幂等键；
+- 信任约束（D19）：面向 provider 的收益/发放 UI 仍只能落在信任域，不得进 C++ 客户端。
+
+**历史（供回溯）**：P2 曾实现“完成即 deduct”：计费 =（上报难度 ?? 静态难度）× 单价 →
+reward 台账（`infer_reward_ledger`，pg 权威）+ kit `/points` deduct（requestId=`deduct:{taskId}`）；
+三态降级为未配置 POINTS_BASE_URL 时仅台账不实扣。deposit 兑付按门禁后置，从未启用。
 
 ### D19 — UI 三场景 + 信任约束
 
-① 用户 web 看自己历史任务 ② 管理员后台看全网 ③ 算力终端(C++)看本机；**①② 在 Next 全栈**，③ 在 client CLI/TUI（见 [client/DESIGN.md](../client/DESIGN.md)）。**信任约束**：provider 收益 / 存入(deposit) UI **只能在 Next（信任域）**，不可落 C++ 客户端（不信任域，禁自助触发 deposit）；③ 限本机只读状态。
+① 用户 web 看自己历史任务 ② 管理员后台看全网 ③ 算力终端(C++)看本机；**①② 在 Next 全栈**，③ 在 client CLI/TUI（见 [client/DESIGN.md](../client/DESIGN.md)）。**信任约束**：任何 provider 收益 / 报酬发放类 UI **只能在 Next（信任域）**，不可落 C++ 客户端（不信任域，禁自助触发发放）——计量面接入后此约束照旧生效；③ 限本机只读状态。
 
 ### D20 — 对象存储总线：/storage + 控制面签发预签名 URL
 
@@ -98,7 +114,7 @@ deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧�
 | `/config` | env facets（deployment/authCenter/admin）+ `resolveListenAddress` 自托管监听（D11） | 部署面 |
 | `/db` | Ledger(任务→客户端) / 注册信息 / 工作流状态持久化（D7） | 结果回收基本键 |
 | `/storage` | **数据面总线**：DCIr 打包模型产物 + 全部张量交互经预签名 URL（D20/V8）；客户端声明持有模型 | 模型分发 + 张量总线 |
-| `/points` | deduct 计量扣费（消费侧）+ deposit 算力报酬存入（产出侧，D12） | 生态闭环 |
+| `/points` | ~~deduct 计量扣费 + deposit 报酬存入~~ **已退役（2026-09-09）**：facet 整体下线，计量归平台计量域 | 生态闭环（待重建） |
 | `/app` + `/app/next` | 服务目录自述，接入云洲应用目录 | 生态集成 |
 
 ## 4. 控制面 ↔ 执行面 IPC（原根 DESIGN §6，D16 展开）
@@ -125,7 +141,8 @@ deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧�
 
 - ~~§12.4 客户端注册是否需鉴权~~ **已定（V3，2026-09-07）**：P1 即强制 `/auth` 机器凭证；影响控制通道端点与 client `register`。
   **开发/CI 态降级（P1 拍板）**：`AUTH_CENTER_BASE_URL` 未配置 → introspect 跳过、控制通道放行 + 进程级一次性告警（生产部署必须配置，「强制」由配置纪律保证）；鉴权中心不可达 → fail-closed 503；`INFER_AUTH_PRODUCT_ID` 配置后校验凭证 productId（防跨产品凭证）。accountId 绑定时机 = 注册（introspect `claims.accountId` 自报，v1.6 token 契约）。
-- ~~§12.6 /points 计量维度~~ 方向**已定（V13，2026-09-07）**：模型报价（单价 × 难度钩子），P2 起启用；deposit 门禁不变（D12）。
+- ~~§12.6 /points 计量维度~~ ⚠️ 已推翻（2026-09-09）：模型报价（单价 × 难度钩子）与 /points 调用
+  已从本仓移除，计量维度归平台计量域（见 D12）。
 - ~~§12.7 sidecar 生命周期~~ **已定（2026-09-07 确认）**：Next `instrumentation` 启动时拉起 + 崩溃重启（根 §11「双平面 IPC 故障域」）；**状态回传走控制面轮询 `/status`（V7）**；独立部署形态后置。
 
 ## 7. 交叉引用
@@ -134,4 +151,4 @@ deduct（计量扣费，消费侧）+ deposit（算力报酬存入，产出侧�
 - 能力 Schema / 契约形态（D6/D15）：[contracts/DESIGN.md](../contracts/DESIGN.md)
 - client 侧（D10/D18 + D19③/D20 消费侧）：[client/DESIGN.md](../client/DESIGN.md)
 - 执行面 sidecar 落地：[sidecar/README.md](./sidecar/README.md) · 路由树规划：[app/README.md](./app/README.md)
-- 计费 / 安全专项：[deposit-model.md](../docs/deposit-model.md) · [security-compute-providers.md](../docs/security-compute-providers.md)
+- 安全专项：[security-compute-providers.md](../docs/security-compute-providers.md)（其 §6/§7 的 deposit 与对账设计已暂停，待计量域重建）

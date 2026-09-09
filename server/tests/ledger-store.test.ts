@@ -2,6 +2,8 @@
  * Ledger 持久化单测（P2 批次 A/B）：InMemoryLedgerStore 语义 + 双账本 write-through
  * 挂接 + 启动恢复重推 + shelf_life 过期判定。pg 实现同接口（一致性由契约类型约束；
  * 真库集成测试待 CI pg 服务可用后补）。
+ *
+ * 曾经的 reward 台账用例随积分逻辑一并移除（2026-09-09）；计量域接入后另立测试面。
  */
 
 import { describe, expect, it } from "vitest";
@@ -36,35 +38,15 @@ describe("InMemoryLedgerStore（/db 内存降级实现）", () => {
   it("workflow/task write-through 语义：put → loadAll 往返一致", async () => {
     const store = new InMemoryLedgerStore();
     await store.init();
-    const record = wf("wf-a", { endpointId: "ep-1", consumerAccountId: "acc-1" });
+    const record = wf("wf-a", { endpointId: "ep-1" });
     const entry = task("t-1", { pushed: true });
     await store.putWorkflow(record);
     await store.putTask(entry);
     const loaded = await store.loadAll();
     expect(loaded.workflows).toHaveLength(1);
     expect(loaded.workflows[0].workflowId).toBe("wf-a");
-    expect(loaded.workflows[0].consumerAccountId).toBe("acc-1");
+    expect(loaded.workflows[0].endpointId).toBe("ep-1");
     expect(loaded.tasks[0].pushed).toBe(true);
-  });
-
-  it("reward 台账：UNIQUE(client_id, task_id) 语义（同键不重复）", async () => {
-    const store = new InMemoryLedgerStore();
-    const row = {
-      id: "r-1",
-      clientId: "ep-1",
-      accountId: "provider-1",
-      taskId: "t-1",
-      workflowId: "wf-1",
-      points: 10,
-      difficulty: 1,
-      status: "pending",
-    };
-    await store.insertReward(row);
-    await store.insertReward({ ...row, id: "r-2" }); // 同 client+task，不同 id——幂等命中不新增
-    const all = await store.listRewards();
-    expect(all).toHaveLength(1);
-    expect(await store.listRewards("provider-1")).toHaveLength(1);
-    expect(await store.listRewards("other")).toHaveLength(0);
   });
 });
 

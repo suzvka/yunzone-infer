@@ -20,7 +20,7 @@
 | **DCIr** | 推理图序列化 / 反序列化 + 模型打包（nlohmann-json + minizip + zlib） | 序列化图产物 = 控制面 ↔ 执行面的**契约载体** |
 | **DCNet** | 张量网络传输框架（DCinfer 仓库内模块，出站已建成） | **2026-09-07 修正：不启用**（`DCINFER_BUILD_DCNET=OFF`，submodule 仍锁仓库）——数据面改走对象存储总线（§9）；直连低延迟需求留 P3，经 D13 提案机制反馈 |
 | **调度器策略参考** | 成熟 C++ 调度器实现（打分调度 / 多级优先级队列防饥饿 / 异步播种-收割 sowing·harvesting / 结果保质期 shelf_life） | **策略参考**，不引入代码依赖 |
-| **yunzone-service-kit** | TS/Node 集群基础设施（`/registry` `/ops` `/auth` `/config` `/db` `/storage` `/points` `/app`；`next` 为 optional peer） | 控制面**必然依赖**，生态集成落点见 [server/DESIGN.md](./server/DESIGN.md) §3 |
+| **yunzone-service-kit** | TS/Node 集群基础设施（`/registry` `/ops` `/auth` `/config` `/db` `/storage` `/app`；`next` 为 optional peer；`/points` 已于 2026-09-09 退役） | 控制面**必然依赖**，生态集成落点见 [server/DESIGN.md](./server/DESIGN.md) §3 |
 
 > 关键约束：service-kit 是纯 TS 库 → 控制面必须 TS/Next；开题文档写死服务器是"推理图唯一持有者 + 结果聚合者"（= DCinfer 数据驱动图执行）→ 执行面必须 C++ DCinfer。两者皆不可让，故服务器**强制双平面**（D1，见 [server/DESIGN.md](./server/DESIGN.md)）。
 
@@ -38,7 +38,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 │   │   ├── 调度器         图分区 → 任务到客户端绑定（策略可替换接口，D9）
 │   │   ├── 工作流状态机   登记→检视→绑定→派发→回收→聚合 的编排与状态持久化（/db Ledger）
 │   │   ├── 管理控制台     /ops + /ops/next requireAdminAuth；getStatus 快照投影"检视全部节点"（D5）
-│   │   ├── 生态集成       /auth 鉴权 · /points 计量 · /storage 模型产物 · /config env facets · /app 目录
+│   │   ├── 生态集成       /auth 鉴权 · /storage 模型产物 · /config env facets · /app 目录
 │   │   └── 控制通道端点   REST（注册 / 心跳 / 完成上报 / 状态）+ WS 推送（任务下发，V5）；心跳全量携带能力声明（V6）
 │   └── 执行面（C++ sidecar 子进程，link DCinfer，D2）
 │       ├── 图持有 / 重建  DCIr 反序列化 → 按绑定计划把节点标记为远程（远程节点经对象存储 URI 交互，§9）
@@ -88,7 +88,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 | V10 | 引擎运行时 | 首版仅 ONNX Runtime（复用 DCinfer OnnxRuntime 引擎适配器）；TensorRT 后置 | [client/DESIGN.md](./client/DESIGN.md) |
 | V11 | CLI↔daemon 管控 | loopback HTTP + 随机 token（与 D16 同构） | [client/DESIGN.md](./client/DESIGN.md) |
 | V12 | 对拍拓扑 | 两段式：P0 本机多进程 + 本地对象存储替身；P1 末真双机验收 | 本文 §9 |
-| V13 | 计费可信度 | 难度钩子（内容级）信任市场竞争 + 直营模型精算，不建抽样审计 | [security-compute-providers.md](./docs/security-compute-providers.md) |
+| V13 | 计费可信度 | ⚠️ 已推翻（2026-09-09）：报价与账本上移平台计量域，不由端点自报难度计价 | [server/DESIGN.md](./server/DESIGN.md) D12 |
 
 ### 4.2 决策下沉索引（D1–D20 全局唯一编号；权威定义已移至子项目 DESIGN.md）
 
@@ -105,7 +105,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 | D9 | 图分区 | MVP 整图绑定单客户端 / 静态手动分区 | [server/DESIGN.md](./server/DESIGN.md) |
 | D10 | 客户端栈 | 纯 C++（DCinfer 本地执行编排层：InferGraph 单节点驱动 + REST/WS），不消费 service-kit | [client/DESIGN.md](./client/DESIGN.md) |
 | D11 | Next 运行时 | 自托管 standalone（node runtime） | [server/DESIGN.md](./server/DESIGN.md) |
-| D12 | 生态计费 | /points 双向流 + **模型报价**（单价 × 难度钩子） | [server/DESIGN.md](./server/DESIGN.md) |
+| D12 | 生态计费 | ⚠️ 已从本仓移除（2026-09-09）：计量与定价归平台计量域 | [server/DESIGN.md](./server/DESIGN.md) |
 | **D13** | 对基础工程 | 只复用不修改 + 提案反馈路线图 | **本文 §4.1** |
 | **D14** | 孙项目划分 | 3 孙项目 + 无共享 C++ core | **本文 §4.1** |
 | D15 | 契约形态 | JSON 单一事实源 + codegen（→ TS + C++） | [contracts/DESIGN.md](./contracts/DESIGN.md) |
@@ -174,7 +174,8 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 3. 远程节点错误码与图级失败映射：client 完成上报携带 infer 自有错误码（contracts `errors/`），执行面映射语义与本地执行对齐；P0 对拍实测确认（§9）。
 4. ~~客户端注册是否需要鉴权~~ **已定（V3，2026-09-07）**：P1 即强制 `/auth` 机器凭证（security §3 倾向采纳）→ **[server/DESIGN.md](./server/DESIGN.md) §6 + [client/DESIGN.md](./client/DESIGN.md) §5**。
 5. ~~模型产物分发策略~~ **已定（D20）**：经 `/storage` + 控制面签发预签名 URL（[server/DESIGN.md](./server/DESIGN.md)）。
-6. ~~`/points` 计量接入时机与计费维度~~ 方向**已定（V13，2026-09-07）**：模型报价＝单价 × 难度钩子（内容级，市场机制约束，不建审计），P2 起启用；deposit 门禁不变 → **[server/DESIGN.md](./server/DESIGN.md) §6**（受 [security-compute-providers.md](./docs/security-compute-providers.md) 约束）。
+6. ~~`/points` 计量接入时机与计费维度~~ ⚠️ 问题已推翻（2026-09-09）：本仓不再持有积分与报价，
+   计量面由平台计量域接管后重新开题 → **[server/DESIGN.md](./server/DESIGN.md) D12**。
 7. ~~sidecar 生命周期~~ **已定（2026-09-07 确认）**：Next `instrumentation` 拉起 + 崩溃重启 → **[server/DESIGN.md](./server/DESIGN.md) §6**。
 8. **外部 C++ 依赖双平台可移植性（D17 头号未知，全局）**：DCinfer/DCIr 须在 Windows(MSVC)+Linux(GCC/Clang) 实证 build+run（DCNet 不启用，V9）——**P0 spike**。
 
@@ -182,7 +183,7 @@ yunzone-infer（多语言 monorepo · 3 孙项目，见 §4 D14）
 
 1. **P0 奠基**：**仓库骨架（3 孙项目）+ 双轨 CI（OS 矩阵）冒烟**；`contracts/` JSON 单一事实源 + codegen（TS/C++）落地；锁双平面边界 + sidecar IPC（D16 HTTP-loopback）；**数据面最小总线闭环 + 对拍 spike**（对象存储 URI 契约 + client 执行表面验证已定，§9③；**双平台可移植性仍须实证**）；能力声明 Schema 版本化；多机集成测试骨架（确定性对拍）。
 2. **P1 单跳闭环（MVP）**：`/registry` 节点注册中心（继承 ProviderRegistry + **自建 TTL 存活/注销/多能力匹配**，D4）→ 能力检视 → 整图绑定单客户端 → 任务下发（WS）→ **远程节点经对象存储总线 + 完成上报驱动 client 执行（InferGraph 单节点驱动 + ORT 适配器）** → C++ 聚合 → 回控制面；`/auth` 请求鉴权（P1 即强制，V3）+ `/ops` 管理控制台展示已登记节点。跑通"端到端正确性 + 语义一致性"两条验收。**关键路径**：client 图驱动执行（InferGraph 单节点 + ORT 适配器）与对象存储总线闭环。
-3. **P2 分区 + 异步**（**已落地 2026-09-08，服务端四项**）：静态图分区（nodeGroups 分组约束 + 环 SCC 校验 + 多端点绑定，D9）；多任务在途调度 + shelf_life（签名收口）+ 任务级重调度（回收按 `(客户端,任务)` 键寻址 + 注入等待中的图节点，D8 事件驱动）；`/db` Ledger 持久化（pg write-through + 启动恢复 + reward 台账 pg 权威，D7）；`/points` 计量（完成即 deduct，模型报价：单价 × 难度钩子，D12；受 §12.6 门禁约束，deposit 兑付后置）；容错验收（掉线 / 超时 / 过载 / 重启恢复，场景测试覆盖）；client 侧（CLI V11 / 队列老化算法 / model pull）后置 P3。
+3. **P2 分区 + 异步**（**已落地 2026-09-08，服务端四项**）：静态图分区（nodeGroups 分组约束 + 环 SCC 校验 + 多端点绑定，D9）；多任务在途调度 + shelf_life（签名收口）+ 任务级重调度（回收按 `(客户端,任务)` 键寻址 + 注入等待中的图节点，D8 事件驱动）；`/db` Ledger 持久化（pg write-through + 启动恢复，D7）；~~`/points` 计量（完成即 deduct，模型报价：单价 × 难度钩子，D12）~~（2026-09-09 已删，见 D12）；容错验收（掉线 / 超时 / 过载 / 重启恢复，场景测试覆盖）；client 侧（CLI V11 / 队列老化算法 / model pull）后置 P3。
 4. **P3 优化**：打分调度（借鉴成熟调度器打分策略）；高效张量格式演进；自动图分区探索。
 
 ## 14. 验收主旨（承接开题 §7）

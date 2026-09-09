@@ -73,15 +73,15 @@ WS 收「执行节点」通知 → **入队**（per-model 队列）→ 出队（
 ## 4. 消费侧引用（主导定义在其他子项目）
 
 - **D6 能力声明的产生**（主定义 [contracts/DESIGN.md](../contracts/DESIGN.md)）：端点语义四面——模型清单 / 队列余量 / 显存水位 / 分段耗时指标；模型清单 = 端点图内节点清单（D10 端点封装意图）；遵守 `schema/capability/` 版本化契约（V2 整数递增）。
-- **D19③ 算力终端只读**（主定义 [server/DESIGN.md](../server/DESIGN.md)）：场景③「算力终端(C++)看本机」在 client CLI/TUI，**限本机只读状态**；provider 收益 / 存入(deposit) UI **不可落 client**（不信任域，见 §5）。
+- **D19③ 算力终端只读**（主定义 [server/DESIGN.md](../server/DESIGN.md)）：场景③「算力终端(C++)看本机」在 client CLI/TUI，**限本机只读状态**；任何 provider 收益 / 报酬发放类 UI **不可落 client**（不信任域，见 §5；计量面已于 2026-09-09 离开本集群，重建时沿用本约束）。
 - **D20 总线交互消费侧**（主定义 [server/DESIGN.md](../server/DESIGN.md)）：输入 / 输出 / 模型均经预签名 URL，client 不持对象存储凭证。
 - **D7 结果回收回推侧**（主定义 [server/DESIGN.md](../server/DESIGN.md)）：`(客户端, 任务)` 键经完成上报携带。
 
 ## 5. 信任边界与并发约束
 
-- **不信任域**（[security-compute-providers.md](../docs/security-compute-providers.md) §1）：client 属第三方、可能恶意。**禁自助触发 deposit**（收益 / 存入只在 server 信任域，D19）；注册鉴权 + 结果验证在控制面。
+- **不信任域**（[security-compute-providers.md](../docs/security-compute-providers.md) §1）：client 属第三方、可能恶意。**禁任何自助发放报酬的路径**（收益 / 发放只在 server 信任域，D19）；注册鉴权 + 结果验证在控制面。
 - **注册鉴权**（V3 已定强制）：`register --token <机器凭证>` 对接 `/auth` client_credentials，绑定 accountId；**不收集硬件指纹**（2026-09-07 裁决：端点语义不描述终端配置，Sybil 防御走账号维度，security §3.2）。
-- **难度系数**（D12/V13）：client 执行时按模型元数据中的难度钩子计算并随完成上报——内容级自报值，信任市场机制 + 直营模型精算（V13，不建抽样审计）。
+- **难度系数字段**（⚠️ 2026-09-09 语义置空）：`CompletionReport.difficulty` 仍在 contracts 里且 client 照旧上报，但**控制面不再用它计价**（报价与账本已上移平台计量域，D12）。接入时该字段要么重定义为可审计的客观用量，要么从契约删除——不在本仓恢复其货币含义。
 - **任务队列自治**（原「并发=1」退役，2026-09-07）：队列结构 / 优先级 / 撤销 / 上限见 §3.5；能力声明上报队列余量与显存水位（[contracts/DESIGN.md](../contracts/DESIGN.md) §3）。
 
 ## 6. 交叉引用

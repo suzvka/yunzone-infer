@@ -12,7 +12,7 @@
 - **无共享 C++ core**（D14）：`server/sidecar` 与 `client` 各自维护封装 glue（引擎适配 / 总线交互）；共享语义靠 `contracts/` codegen 收口。
 - **两条通道不可混用**（DESIGN §3，2026-09-07 修正后形态）：控制通道（TS / REST + WS，JSON）vs **数据面（对象存储总线，张量以 URI + 元数据寻址）**；原 DCNet 直驱已退役。
 - **client 纯 C++ 不消费 service-kit**（D10）：模型拉取经控制面签发的**预签名 URL**（D20），不直连对象存储。
-- **信任约束**（D19）：provider 收益 / 存入(deposit) UI 只能在 `server`（信任域），**不可落 `client`**（不信任域，禁自助触发 deposit）；算力终端(C++ ③)限本机只读状态。
+- **信任约束**（D19）：任何 provider 收益 / 报酬发放类 UI 只能在 `server`（信任域），**不可落 `client`**（不信任域，禁自助触发发放）；算力终端(C++ ③)限本机只读状态。计量与定价已于 2026-09-09 离开本仓（D12），重建时此约束照旧。
 - **文档惯例**：`DESIGN.md` 为**全局架构 + 阶段权威**；决策 D1–D20 编号全局唯一、**权威定义已下沉**——全局决策（D8/D13/D14/D17）在根 `DESIGN.md` §4.1，其余在各子项目 `DESIGN.md`（`server`/`client`/`contracts`），下沉索引见根 `DESIGN.md` §4.2；改动中发现意外 / 跨仓耦合，记入仓库群 `CouplingRecord/`（命名 `[yunzone-infer] yyyyMMdd-HHmmss 描述`）。
 
 <!-- Next.js 集成注意（server/ 控制面）：本仓库群 Next 版本可能与既有认知不同（house 版 16.x），

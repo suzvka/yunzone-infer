@@ -43,7 +43,7 @@ export async function GET(
     // 提交端点对已存在账复用（两步流与一步流在同一提交语义上会合）
     ledger.upsert({ workflowId, status: "registered" });
     console.log(
-      `[infer] workflow account opened by upload intent: ${workflowId} (consumer: ${auth.accountId ?? "anonymous"})`
+      `[infer] workflow account opened by upload intent: ${workflowId}`
     );
   }
 

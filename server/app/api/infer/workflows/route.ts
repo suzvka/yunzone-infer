@@ -16,7 +16,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { StartWorkflowRequest, WorkflowStatus } from "@/lib/contracts";
-import { estimateCost, getPointsClient } from "@/lib/billing";
 import { requireUserAuth } from "@/lib/control-auth";
 import { getEndpointRegistry } from "@/lib/endpoint-registry";
 import { inspectWorkflowGraph, type InspectableModel } from "@/lib/inspection";
@@ -80,28 +79,6 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { graph, remoteNodes, localInputs, nodeGroups, workflowId: clientWorkflowId } = parsed.data;
 
-  // 计量预检（D12/V13，P2 批次 C）：/points 配置时查余额，不足直接拒绝（不可计费
-  // 模型不计入预估，免费语义）；未配置三态跳过（lib/billing 内告警）
-  const points = getPointsClient();
-  if (points && auth.accountId) {
-    const estimate = estimateCost(remoteNodes.map((n) => n.modelKey));
-    if (estimate > 0) {
-      try {
-        const { balance } = await points.balance({ accountId: auth.accountId });
-        if (balance < estimate) {
-          return jsonError(
-            "E_INSUFFICIENT_BALANCE",
-            `balance ${balance} < estimate ${estimate} (accountId: ${auth.accountId})`,
-            422
-          );
-        }
-      } catch (e) {
-        // 预检不可达：不阻塞提交（扣费侧 requestId 幂等兜底），告警放行
-        console.warn(`[infer] balance precheck failed: ${(e as Error).message}`);
-      }
-    }
-  }
-
   // 两步流：id 由消费者自带（键规则含 id，输入预置须先行）；一步流服务端生成
   const ledger = getWorkflowLedger();
   const workflowId = clientWorkflowId ?? randomUUID();
@@ -114,14 +91,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   if (!existing) {
-    ledger.upsert({
-      workflowId,
-      status: "registered",
-      ...(auth.accountId ? { consumerAccountId: auth.accountId } : {}),
-    });
-  } else if (existing.status === "registered" && !existing.consumerAccountId && auth.accountId) {
-    // 两步流开账由上传签名完成（机器面无消费者上下文）——提交时补记扣款锚点
-    ledger.transition(workflowId, "registered", { consumerAccountId: auth.accountId });
+    ledger.upsert({ workflowId, status: "registered" });
   }
 
   // 绑定（D9 MVP：整图单端点；含 IO 复核与余量前置）+ 全量检视（两层防线静态半边）
@@ -191,7 +161,7 @@ export async function POST(request: Request): Promise<Response> {
   });
   console.log(
     `[infer] workflow started: ${workflowId} → endpoint ${bind.endpointId || "(local-only)"} ` +
-      `(remote nodes: ${bind.bindings.length}, consumer account: ${auth.accountId ?? "anonymous"})`
+      `(remote nodes: ${bind.bindings.length})`
   );
 
   const payload: WorkflowStatus = {

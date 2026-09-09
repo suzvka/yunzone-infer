@@ -3,7 +3,7 @@
 //
 // 配置来源：--config <path> JSON 文件（serverBaseUrl / machineToken / endpointId /
 // 心跳间隔 / 模型清单）。机器凭证（V3）经配置注入，本地文件权限由运维侧保证
-// （不信任域约束见 client/DESIGN §5：daemon 不承载 deposit 面即可）。
+// （不信任域约束见 client/DESIGN §5：daemon 不承载任何报酬发放面即可）。
 
 #include <string>
 #include <vector>
